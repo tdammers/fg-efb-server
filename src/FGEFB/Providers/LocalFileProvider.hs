@@ -10,7 +10,8 @@ import System.Process (CreateProcess)
 import qualified System.Process as Process
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString as BS
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
+import Control.Applicative ( (<|>) )
 
 import FGEFB.Provider
 import FGEFB.LoadPDF
@@ -38,10 +39,11 @@ classifyFile providerID rootdir dirname f = do
               }
         _ -> return Nothing
 
-localFileProvider :: FilePath -> Provider
-localFileProvider rootDir =
+localFileProvider :: Maybe Text -> FilePath -> Provider
+localFileProvider mlabel rootDir =
   Provider
-    { listFiles = \providerID dirname -> do
+    { label = mlabel <|> Just (Text.pack $ takeBaseName rootDir)
+    , listFiles = \providerID dirname -> do
         listDirectory(rootDir </> dirname) >>=
           (fmap catMaybes . mapM (classifyFile providerID rootDir dirname))
     , getPdfPage = \filename page -> do

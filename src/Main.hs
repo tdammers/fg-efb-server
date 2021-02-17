@@ -22,10 +22,11 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import System.FilePath ( takeExtension, takeBaseName )
 import System.IO.Temp (withSystemTempDirectory)
+import qualified Data.Yaml as YAML
+import Data.Maybe (fromMaybe)
 
 import FGEFB.Provider
-import FGEFB.Providers.LocalFileProvider
-import FGEFB.Providers.JsonHttpProvider
+import FGEFB.Providers
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
@@ -122,16 +123,16 @@ xmlFileEntry info =
       fileTypeString Directory = "dir"
       fileTypeString PDFFile = "pdf"
 
-xmlProviderList :: Map Text a -> XML.Element
+xmlProviderList :: Map Text Provider -> XML.Element
 xmlProviderList providers =
-  XML.Element "listing" [] (map xmlProviderEntry (Map.keys providers))
+  XML.Element "listing" [] (map xmlProviderEntry (Map.toAscList providers))
 
-xmlProviderEntry :: Text -> XML.Node
-xmlProviderEntry name =
+xmlProviderEntry :: (Text, Provider) -> XML.Node
+xmlProviderEntry (key, provider) =
   xmlFileEntry
     FileInfo
-      { fileName = name
-      , filePath = "/" ++ Text.unpack name
+      { fileName = fromMaybe key (label provider)
+      , filePath = "/" ++ Text.unpack key
       , fileType = Directory
       }
 
@@ -147,24 +148,12 @@ runServerWith providers =
   where
     run = scotty 7675 (app providers)
 
-parseProvider :: String -> Maybe (Text, Provider)
-parseProvider spec = do
-  let parts = Text.splitOn "$" (Text.pack spec)
-  case parts of
-    [label, "file", rootDir] ->
-      return (label, localFileProvider (Text.unpack rootDir))
-    [label, "json", urlPattern] ->
-      return (label, jsonHttpProvider urlPattern)
-    _ ->
-      Nothing
+runServer :: IO ()
+runServer = do
+  providers <- YAML.decodeFileThrow "./providers.yaml"
 
-parseProvidersIO :: [String] -> IO (Map Text Provider)
-parseProvidersIO =
-  fmap Map.fromList . mapM (maybe (error "Invalid provider spec") return . parseProvider)
-
-runServer :: [String] -> IO ()
-runServer args = parseProvidersIO args >>= runServerWith
+  runServerWith providers
 
 main :: IO ()
 main = do
-  runServer =<< getArgs
+  runServer

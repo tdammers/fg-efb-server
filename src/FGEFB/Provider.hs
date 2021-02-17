@@ -7,7 +7,8 @@ import qualified Data.ByteString.Lazy as LBS
 
 data Provider =
   Provider
-    { listFiles :: Text -> FilePath -> IO [FileInfo]
+    { label :: Maybe Text
+    , listFiles :: Text -> FilePath -> IO [FileInfo]
     , getPdfPage :: FilePath -> Int -> IO LBS.ByteString
     }
 

@@ -34,10 +34,11 @@ entryToFileInfo providerID entry =
   FileInfo
     { fileName = entry_title entry
     , filePath =
-        if entry_isDir entry then
-          show (entry_id entry)
-        else
-          show (entry_parentId entry) </> show (entry_id entry) <.> "pdf"
+        Text.unpack providerID </>
+          if entry_isDir entry then
+            show (entry_id entry)
+          else
+            show (entry_parentId entry) </> show (entry_id entry) <.> "pdf"
     , fileType =
         if entry_isDir entry then
           Directory
@@ -60,10 +61,11 @@ getEntriesFrom url = do
   rq <- HTTP.parseRequest url
   HTTP.getResponseBody <$> httpJSON rq
 
-jsonHttpProvider :: Text -> Provider
-jsonHttpProvider urlPattern =
+jsonHttpProvider :: Maybe Text -> Text -> Provider
+jsonHttpProvider mlabel urlPattern =
   Provider
-    { listFiles = \providerID dirname -> do
+    { label = mlabel
+    , listFiles = \providerID dirname -> do
         mparentID <- if dirname == "" then
                       return Nothing
                     else maybe (error "Invalid parentID") (return . Just) $ readMaybe dirname

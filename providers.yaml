@@ -1,0 +1,9 @@
+local:
+  label: "Local Disk"
+  type: file
+  path: /home/tobias/flightgear/charts
+navaid:
+  label: "Danmark NavAID"
+  type: json
+  template: 'https://aim.naviair.dk/umbraco/api/naviairapi/getnodesforparent?parentId={parentid}'
+
