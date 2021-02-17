@@ -2,8 +2,28 @@ local:
   label: "Local Disk"
   type: file
   path: /home/tobias/flightgear/charts
-navaid:
-  label: "Danmark NavAID"
+EK:
+  label: "Denmark NavAID"
   type: json
   template: 'https://aim.naviair.dk/umbraco/api/naviairapi/getnodesforparent?parentId={parentid}'
-
+ES:
+  label: "Sweden AROWeb"
+  type: html
+  url: 'https://aro.lfv.se'
+  start: '/Editorial/View/IAIP?folderId=79'
+  folder-elems: 'a.sortableFolder--rightArrow,a.folder-link'
+  folder-elem-url-attrib: 'href'
+  document-elems: 'a.document-link'
+  document-elem-label: 'span.document-name'
+  document-elem-url-attrib: 'href'
+# ED:
+#   label: "Germany Luftfahrthandbuch"
+#   type: html
+#   url: 'https://aip.dfs.de'
+#   start: '/basicIFR/2021JAN29/a0bdc497e8c2b318926a77707f2839a8.html'
+#   folder-elems: 'a.folder-link'
+#   folder-elem-url-attrib: 'href'
+#   folder-elem-label: 'span.folder-prefix'
+#   document-elems: 'a.document-link'
+#   document-elem-label: 'span.document-prefix'
+#   document-elem-url-attrib: 'href'
