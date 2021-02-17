@@ -17,53 +17,15 @@ import qualified System.Process as Process
 import System.Process (CreateProcess)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString as BS
-import System.FilePath ( (</>), makeRelative, takeExtension, takeBaseName )
-import System.Directory (listDirectory, doesDirectoryExist)
-import System.Environment (getArgs)
-import Data.Maybe (catMaybes)
+import System.Environment (getArgs, setEnv)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import System.FilePath ( takeExtension, takeBaseName )
+import System.IO.Temp (withSystemTempDirectory)
 
-data Provider =
-  Provider
-    { listFiles :: Text -> FilePath -> IO [FileInfo]
-    , getPdfPage :: FilePath -> Int -> IO LBS.ByteString
-    }
-
-data FileInfo =
-  FileInfo
-    { fileName :: Text
-    , filePath :: FilePath
-    , fileType :: FileType
-    }
-    deriving (Show)
-
-localFileProvider :: FilePath -> Provider
-localFileProvider rootDir =
-  Provider
-    { listFiles = \providerID dirname -> do
-        listDirectory(rootDir </> dirname) >>=
-          (fmap catMaybes . mapM (classifyFile providerID rootDir dirname))
-    , getPdfPage = \filename page -> do
-        let cp = (Process.proc "convert"
-                  [ "-background", "white"
-                  , "-density"
-                  , "150"
-                  , rootDir </> filename ++ "[" ++ show page ++ "]"
-                  , "-quality", "99"
-                  , "jpeg:-"
-                  ]
-                )
-                { Process.std_out = Process.CreatePipe
-                }
-        putStrLn filename
-        Process.withCreateProcess cp $ \_ mout _ _ -> do
-          case mout of
-            Nothing ->
-              error "Something bad happened."
-            Just out ->
-              LBS.fromStrict <$> BS.hGetContents out
-    }
+import FGEFB.Provider
+import FGEFB.Providers.LocalFileProvider
+import FGEFB.Providers.JsonHttpProvider
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
@@ -143,34 +105,6 @@ xmlFragmentToDocument docroot =
     , XML.documentRoot = docroot
     }
 
-data FileType
-  = Directory
-  | PDFFile
-  deriving (Show, Eq)
-
-classifyFile :: Text -> FilePath -> FilePath -> FilePath -> IO (Maybe FileInfo)
-classifyFile providerID rootdir dirname f = do
-  let fullname = rootdir </> dirname </> f
-      qname = Text.unpack providerID </> dirname </> f
-  doesDirectoryExist fullname >>= \case
-    True ->
-      return $
-        Just FileInfo
-          { filePath = qname
-          , fileName = Text.pack f
-          , fileType = Directory
-          }
-    False ->
-      case takeExtension f of
-        ".pdf" ->
-          return $
-            Just FileInfo
-              { filePath = qname
-              , fileName = Text.pack $ takeBaseName f
-              , fileType = PDFFile
-              }
-        _ -> return Nothing
-
 xmlFileList :: [FileInfo] -> XML.Element
 xmlFileList files =
   XML.Element "listing" [] (map xmlFileEntry files)
@@ -201,15 +135,30 @@ xmlProviderEntry name =
       , fileType = Directory
       }
 
+runServerWith :: Map Text Provider -> IO ()
+runServerWith providers =
+  withSystemTempDirectory "fg-efb-cache" $ \tmpdir -> do
+    setEnv "PDFCACHE" tmpdir
+    scotty 7675 (app providers)
+
+parseProvider :: String -> Maybe (Text, Provider)
+parseProvider spec = do
+  let parts = Text.splitOn "$" (Text.pack spec)
+  case parts of
+    [label, "file", rootDir] ->
+      return (label, localFileProvider (Text.unpack rootDir))
+    [label, "json", urlPattern] ->
+      return (label, jsonHttpProvider urlPattern)
+    _ ->
+      Nothing
+
+parseProvidersIO :: [String] -> IO (Map Text Provider)
+parseProvidersIO =
+  fmap Map.fromList . mapM (maybe (error "Invalid provider spec") return . parseProvider)
+
 runServer :: [String] -> IO ()
-runServer localProviders = do
-  let providers = Map.fromList
-        [ ("Local " <> Text.pack (takeBaseName p), localFileProvider p)
-        | p <- localProviders
-        ]
-  scotty 7675 (app providers)
+runServer args = parseProvidersIO args >>= runServerWith
 
 main :: IO ()
 main = do
-  localProviders <- getArgs
-  runServer localProviders
+  runServer =<< getArgs
