@@ -17,7 +17,7 @@ import qualified System.Process as Process
 import System.Process (CreateProcess)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString as BS
-import System.Environment (getArgs, setEnv)
+import System.Environment (getArgs, setEnv, lookupEnv)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import System.FilePath ( takeExtension, takeBaseName )
@@ -137,9 +137,15 @@ xmlProviderEntry name =
 
 runServerWith :: Map Text Provider -> IO ()
 runServerWith providers =
-  withSystemTempDirectory "fg-efb-cache" $ \tmpdir -> do
-    setEnv "PDFCACHE" tmpdir
-    scotty 7675 (app providers)
+  lookupEnv "PDFCACHE" >>= \case
+    Nothing -> do
+      withSystemTempDirectory "fg-efb-cache" $ \tmpdir -> do
+        setEnv "PDFCACHE" tmpdir
+        run
+    Just _ -> do
+      run
+  where
+    run = scotty 7675 (app providers)
 
 parseProvider :: String -> Maybe (Text, Provider)
 parseProvider spec = do
