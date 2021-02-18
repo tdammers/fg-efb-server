@@ -4,7 +4,7 @@ where
 
 import FGEFB.Provider
 import FGEFB.Providers.LocalFileProvider
-import FGEFB.Providers.JsonHttpProvider
+import FGEFB.Providers.NavaidJsonProvider
 import FGEFB.Providers.HtmlScrapingProvider
 
 import qualified Data.Aeson as JSON
@@ -21,8 +21,8 @@ instance JSON.FromJSON Provider where
         case tag :: Text of
           "file" ->
             localFileProvider label <$> obj .: "path"
-          "json" ->
-            jsonHttpProvider label <$> obj .: "template"
+          "navaid" ->
+            navaidJsonProvider label <$> obj .: "template"
           "html" ->
             htmlScrapingProvider label
               -- root URL

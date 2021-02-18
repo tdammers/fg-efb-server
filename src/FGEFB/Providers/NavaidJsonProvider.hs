@@ -1,6 +1,6 @@
 {-#LANGUAGE TemplateHaskell #-}
 {-#LANGUAGE OverloadedStrings #-}
-module FGEFB.Providers.JsonHttpProvider
+module FGEFB.Providers.NavaidJsonProvider
 where
 
 import Data.Text (Text)
@@ -61,8 +61,8 @@ getEntriesFrom url = do
   rq <- HTTP.parseRequest url
   HTTP.getResponseBody <$> httpJSON rq
 
-jsonHttpProvider :: Maybe Text -> Text -> Provider
-jsonHttpProvider mlabel urlPattern =
+navaidJsonProvider :: Maybe Text -> Text -> Provider
+navaidJsonProvider mlabel urlPattern =
   Provider
     { label = mlabel
     , listFiles = \providerID dirname -> do

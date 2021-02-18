@@ -22,9 +22,10 @@ executable fg-efb-server
   other-modules: FGEFB.Provider
                , FGEFB.Providers
                , FGEFB.Providers.LocalFileProvider
-               , FGEFB.Providers.JsonHttpProvider
+               , FGEFB.Providers.NavaidJsonProvider
                , FGEFB.Providers.HtmlScrapingProvider
                , FGEFB.LoadPDF
+               , FGEFB.URL
   -- other-extensions:
   build-depends: base >=4.12 && <4.15
                , aeson >=1.5.5.1 && <1.6

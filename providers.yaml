@@ -4,7 +4,7 @@ local:
   path: /home/tobias/flightgear/charts
 EK:
   label: "Denmark NavAID"
-  type: json
+  type: navaid
   template: 'https://aim.naviair.dk/umbraco/api/naviairapi/getnodesforparent?parentId={parentid}'
 ES:
   label: "Sweden AROWeb"
@@ -16,14 +16,14 @@ ES:
   document-elems: 'a.document-link'
   document-elem-label: 'span.document-name'
   document-elem-url-attrib: 'href'
+# # Following doesn't work, because Germany decided to publish their charts as
+# # PNG images embedded in HTML documents, encoded in `data:` URLs.
 # ED:
 #   label: "Germany Luftfahrthandbuch"
 #   type: html
 #   url: 'https://aip.dfs.de'
-#   start: '/basicIFR/2021JAN29/a0bdc497e8c2b318926a77707f2839a8.html'
+#   start: '/basicIFR/'
 #   folder-elems: 'a.folder-link'
 #   folder-elem-url-attrib: 'href'
 #   folder-elem-label: 'span.folder-prefix'
-#   document-elems: 'a.document-link'
-#   document-elem-label: 'span.document-prefix'
-#   document-elem-url-attrib: 'href'
+#   document-elems: 'a.does-not-exist'
