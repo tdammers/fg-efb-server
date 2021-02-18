@@ -39,7 +39,7 @@ captureListing rq =
           [ ("provider", LText.fromStrict providerID)
           , ("path", "")
           ]
-      else if takeExtension (Text.unpack $ last pathItems) `elem` (["", ".html"] :: [String]) then
+      else if takeExtension (Text.unpack $ last pathItems) /= ".pdf" then
         Just
           [ ("provider", LText.fromStrict providerID)
           , ("path", LText.fromStrict $ Text.intercalate "/" $ pathItems)

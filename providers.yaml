@@ -2,6 +2,23 @@ local:
   label: "Local Disk"
   type: file
   path: /home/tobias/flightgear/charts
+EH:
+  label: "Netherlands eAIP"
+  type: html
+  url: 'https://www.lvnl.nl'
+  start: '/informatie-voor-luchtvarenden/publicaties-voor-luchtvarenden'
+  folders:
+    - select: 'frame[name=eAISMenuContentFrame],frame[name=eAISMenuFrameset],frame[name=eAISMenuContent]'
+      href: '@src'
+      label: '@name'
+    - select: 'div.H1>a#AD,div.H1>a#ENR,div.H1>a#GEN'
+      label: '@title'
+    - select: 'a[title=eAIP],h3.toc a'
+  documents:
+    - select: 'td'
+      href:
+        child: 'div.Figure a'
+        attrib: 'href'
 EK:
   label: "Denmark NavAID"
   type: navaid
@@ -11,11 +28,11 @@ ES:
   type: html
   url: 'https://aro.lfv.se'
   start: '/Editorial/View/IAIP?folderId=79'
-  folder:
-    select: 'a.sortableFolder--rightArrow,a.folder-link'
-  document:
-    select: 'a.document-link'
-    label: 'span.document-name'
+  folders:
+    - select: 'a.sortableFolder--rightArrow,a.folder-link'
+  documents:
+    - select: 'a.document-link'
+      label: 'span.document-name'
 # # Following doesn't work, because Germany decided to publish their charts as
 # # PNG images embedded in HTML documents, encoded in `data:` URLs.
 # ED:

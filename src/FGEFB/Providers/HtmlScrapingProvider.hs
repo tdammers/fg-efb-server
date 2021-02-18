@@ -96,10 +96,10 @@ extractLinks spec root = do
 htmlScrapingProvider :: Maybe Text
                      -> Text -- ^ root URL
                      -> Text -- ^ landing path
-                     -> LinkSpec -- ^ folders
-                     -> LinkSpec -- ^ documents
+                     -> [LinkSpec] -- ^ folders
+                     -> [LinkSpec] -- ^ documents
                      -> Provider
-htmlScrapingProvider mlabel rootUrlStr landingPath folderSpec documentSpec =
+htmlScrapingProvider mlabel rootUrlStr landingPath folderSpecs documentSpecs =
   Provider
     { label = mlabel
     , getPdfPage = \filenameEnc page -> do
@@ -115,13 +115,17 @@ htmlScrapingProvider mlabel rootUrlStr landingPath folderSpec documentSpec =
         let currentURL = either error id $ parseURL parentPath
         let root = XML.fromDocument document
             folderInfos =
-              map
-                (makeLink True currentURL providerID)
-                (extractLinks folderSpec root)
+              concatMap (\folderSpec ->
+                map
+                  (makeLink True currentURL providerID)
+                  (extractLinks folderSpec root))
+                folderSpecs
             documentInfos =
-              map
-                (makeLink False currentURL providerID)
-                (extractLinks documentSpec root)
+              concatMap (\documentSpec ->
+                map
+                  (makeLink False currentURL providerID)
+                  (extractLinks documentSpec root))
+                documentSpecs
         return $ folderInfos ++ documentInfos
     }
     where

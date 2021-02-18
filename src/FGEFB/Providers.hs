@@ -26,8 +26,8 @@ instance JSON.FromJSON Provider where
           "html" -> do
             root <- obj .: "url"
             landing <- obj .: "start" .!= "/"
-            folderSel <- obj .: "folder"
-            documentSel <- obj .: "document"
+            folderSel <- obj .: "folders"
+            documentSel <- obj .: "documents"
             return $
               htmlScrapingProvider label root landing folderSel documentSel
           _ ->
