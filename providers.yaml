@@ -2,6 +2,23 @@ local:
   label: "Local Disk"
   type: file
   path: /home/tobias/flightgear/charts
+BI:
+  label: "Iceland Samgöngustofa"
+  type: html
+  url: 'http://eaip.samgongustofa.is'
+  start: '/'
+  folders:
+    - select: 'td.green>a,h3.toc a'
+    - select: 'frame[name=eAISNavigation]'
+      href: '@src'
+      label: '@name'
+    - select: '.H3 a[title]'
+  documents:
+    - select: 'td div.graphic-box a'
+      format:
+        - 'basename'
+        - split: '-'
+        - split: '_'
 EH:
   label: "Netherlands eAIP"
   type: html
@@ -11,14 +28,23 @@ EH:
     - select: 'frame[name=eAISMenuContentFrame],frame[name=eAISMenuFrameset],frame[name=eAISMenuContent]'
       href: '@src'
       label: '@name'
+      format:
+        - replace: ['eAIS', '']
+        - replace: ['Menu', '']
+        - 'split-humps'
     - select: 'div.H1>a#AD,div.H1>a#ENR,div.H1>a#GEN'
       label: '@title'
     - select: 'a[title=eAIP],h3.toc a'
+      format:
+        - replace: ['/', ' / ']
   documents:
     - select: 'td'
       href:
         child: 'div.Figure a'
         attrib: 'href'
+      format:
+        - replace: ['AD 2.', '']
+        - replace: ['-', ' ']
 EK:
   label: "Denmark NavAID"
   type: navaid

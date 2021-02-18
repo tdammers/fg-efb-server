@@ -12,6 +12,7 @@ import qualified Data.Aeson as JSON
 import qualified Data.Aeson.TH as JSON
 import Network.HTTP.Simple (httpJSON, httpBS)
 import qualified Network.HTTP.Simple as HTTP
+import qualified Network.HTTP.Conduit as HTTP
 import Text.Read (readMaybe)
 import System.FilePath (takeBaseName, dropExtension, (</>), (<.>))
 import Control.Monad (when, forM)
@@ -27,6 +28,10 @@ import Data.Text.Encoding (decodeUtf8)
 import Text.Printf (printf)
 import qualified Data.Aeson as JSON
 import Data.Aeson ( (.:), (.:?), (.!=) )
+import Debug.Trace (trace, traceShow)
+import qualified Data.Vector as Vector
+import Data.List (foldl')
+import Text.Casing as Casing
 
 import FGEFB.Provider
 import FGEFB.LoadPDF
@@ -37,10 +42,12 @@ data Extraction =
     { extractionSelector :: Maybe Text
     , extractionTarget :: ExtractionTarget
     }
+    deriving (Show)
 
 data ExtractionTarget
   = ExtractText
   | ExtractAttribute XML.Name
+  deriving (Show)
 
 instance JSON.FromJSON Extraction where
   parseJSON j = case j of
@@ -68,12 +75,46 @@ extract e root = do
     ExtractAttribute n ->
       listToMaybe $ XML.attribute n elem
 
+data LabelFormat
+  = LabelIdentity
+  | LabelBasename
+  | LabelReplace Text Text
+  | LabelSplitHumps
+  | LabelSplitOn Text
+  | LabelFormatList [LabelFormat]
+  deriving (Show)
+
+instance JSON.FromJSON LabelFormat where
+  parseJSON (JSON.String t) =
+    case t of
+      "basename" -> return LabelBasename
+      "split-humps" -> return LabelSplitHumps
+      _ -> fail "Invalid label format"
+  parseJSON (JSON.Array xs) =
+    LabelFormatList <$> mapM JSON.parseJSON (Vector.toList xs)
+  parseJSON j =
+    flip (JSON.withObject "LabelFormat") j $ \obj -> do
+      mreplace <- fmap (\(needle, haystack) -> LabelReplace needle haystack) <$>
+                    obj .:? "replace"
+      msplit <- fmap LabelSplitOn <$> obj .:? "split"
+      return . LabelFormatList . catMaybes $ [mreplace, msplit]
+
+formatLabel :: LabelFormat -> Text -> Text
+formatLabel LabelIdentity = id
+formatLabel LabelBasename = Text.pack . takeBaseName . Text.unpack
+formatLabel LabelSplitHumps = Text.pack . Casing.toWords . Casing.fromHumps . Text.unpack
+formatLabel (LabelReplace needle haystack) = Text.replace needle haystack
+formatLabel (LabelSplitOn sep) = Text.unwords . Text.splitOn sep
+formatLabel (LabelFormatList items) = \src -> foldl' (flip formatLabel) src items
+
 data LinkSpec =
   LinkSpec
     { elemSelector :: Text
     , linkHrefExtraction :: Extraction
     , linkLabelExtraction :: Extraction
+    , linkLabelFormat :: LabelFormat
     }
+    deriving (Show)
 
 instance JSON.FromJSON LinkSpec where
   parseJSON j = JSON.withObject "LinkSpec" goObj j
@@ -83,12 +124,14 @@ instance JSON.FromJSON LinkSpec where
           <$> obj .: "select"
           <*> obj .:? "href" .!= (Extraction Nothing (ExtractAttribute "href"))
           <*> obj .:? "label" .!= (Extraction Nothing ExtractText)
+          <*> obj .:? "format" .!= LabelIdentity
 
 extractLinks :: LinkSpec -> XML.Cursor -> [(Text, URL)]
 extractLinks spec root = do
   sel <- Text.unpack . Text.strip <$> Text.splitOn "," (elemSelector spec)
   elem <- XML.query sel root
-  label <- maybeToList $ extract (linkLabelExtraction spec) elem
+  labelRaw <- maybeToList $ extract (linkLabelExtraction spec) elem
+  let label = formatLabel (linkLabelFormat spec) labelRaw
   href <- maybeToList $ extract (linkHrefExtraction spec) elem
   url <- either (const []) return $ parseURL href
   return (label, url)
@@ -100,6 +143,7 @@ htmlScrapingProvider :: Maybe Text
                      -> [LinkSpec] -- ^ documents
                      -> Provider
 htmlScrapingProvider mlabel rootUrlStr landingPath folderSpecs documentSpecs =
+  traceShow documentSpecs $
   Provider
     { label = mlabel
     , getPdfPage = \filenameEnc page -> do
@@ -134,6 +178,8 @@ htmlScrapingProvider mlabel rootUrlStr landingPath folderSpecs documentSpecs =
 
       makeLink :: Bool -> URL -> Text -> (Text, URL) -> FileInfo
       makeLink isDir currentURL providerID (label, linkUrl) =
+        trace (show currentURL) $
+        trace (printf "makeLink: %s %s\n" (renderURL currentURL) (renderURL linkUrl)) $
         FileInfo
            { fileName = Text.unwords . Text.words $ label
            , filePath = if isDir then path else path <.> ".pdf"
@@ -153,7 +199,8 @@ fetchListing :: Text -> IO (Text, XML.Document)
 fetchListing url = do
   printf "HTTP %s\n" url
   rq <- HTTP.parseRequest (Text.unpack url)
-  rp <- HTTP.httpLBS rq
+  rp <- HTTP.httpLBS rq { HTTP.redirectCount = 0 }
+  printf "%i %s\n" (HTTP.getResponseStatusCode rp) (show $ HTTP.getResponseStatus rp)
   if HTTP.getResponseStatusCode rp `elem` redirectCodes then do
     let mlocation = lookup "Location" $ HTTP.getResponseHeaders rp
     case mlocation of
