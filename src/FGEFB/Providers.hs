@@ -23,23 +23,12 @@ instance JSON.FromJSON Provider where
             localFileProvider label <$> obj .: "path"
           "navaid" ->
             navaidJsonProvider label <$> obj .: "template"
-          "html" ->
-            htmlScrapingProvider label
-              -- root URL
-              <$> obj .: "url"
-              -- landing path
-              <*> obj .:? "start" .!= "/"
-
-              <*> obj .: "folder-elems"
-              <*> obj .:? "folder-elem-url"
-              <*> obj .:? "folder-elem-url-attrib"
-              <*> obj .:? "folder-elem-label"
-              <*> obj .:? "folder-elem-label-attrib"
-
-              <*> obj .: "document-elems"
-              <*> obj .:? "document-elem-url"
-              <*> obj .:? "document-elem-url-attrib"
-              <*> obj .:? "document-elem-label"
-              <*> obj .:? "document-elem-label-attrib"
+          "html" -> do
+            root <- obj .: "url"
+            landing <- obj .: "start" .!= "/"
+            folderSel <- obj .: "folder"
+            documentSel <- obj .: "document"
+            return $
+              htmlScrapingProvider label root landing folderSel documentSel
           _ ->
             fail "Invalid tag"

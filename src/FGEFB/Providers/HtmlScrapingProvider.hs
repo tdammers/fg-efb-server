@@ -16,39 +16,90 @@ import Text.Read (readMaybe)
 import System.FilePath (takeBaseName, dropExtension, (</>), (<.>))
 import Control.Monad (when, forM)
 import qualified Text.HTML.DOM as HTML
-import qualified Text.XML.Cursor as HTML
-import qualified Text.XML.Scraping as HTML
-import qualified Text.XML.Selector as HTML
+import qualified Text.XML.Cursor as XML
+import qualified Text.XML.Scraping as XML
+import qualified Text.XML.Selector as XML
 import qualified Text.XML as XML
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, listToMaybe, maybeToList)
 import Network.HTTP.Base (urlEncode, urlDecode)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Text.Encoding (decodeUtf8)
 import Text.Printf (printf)
+import qualified Data.Aeson as JSON
+import Data.Aeson ( (.:), (.:?), (.!=) )
 
 import FGEFB.Provider
 import FGEFB.LoadPDF
 import FGEFB.URL (renderURL, parseURL, URL (..))
 
+data Extraction =
+  Extraction
+    { extractionSelector :: Maybe Text
+    , extractionTarget :: ExtractionTarget
+    }
+
+data ExtractionTarget
+  = ExtractText
+  | ExtractAttribute XML.Name
+
+instance JSON.FromJSON Extraction where
+  parseJSON j = case j of
+    JSON.String t ->
+      case Text.take 1 t of
+        "" -> return (Extraction Nothing ExtractText)
+        "@" -> return (Extraction Nothing (ExtractAttribute . uqName $ Text.drop 1 t))
+        _ -> return (Extraction (Just t) ExtractText)
+    _ -> JSON.withObject "Extraction" goObj j
+    where
+      goObj obj = do
+        mselector <- obj .:? "child"
+        mattrib <- fmap uqName <$> (obj .:? "attrib")
+        let target = case mattrib of
+                        Nothing -> ExtractText
+                        Just a -> ExtractAttribute a
+        return $ Extraction mselector target
+
+extract :: Extraction -> XML.Cursor -> Maybe Text
+extract e root = do
+  elem <- (maybe Just (XML.query1 . Text.unpack) (extractionSelector e)) root
+  case extractionTarget e of
+    ExtractText ->
+      return (LText.toStrict $ XML.innerText elem)
+    ExtractAttribute n ->
+      listToMaybe $ XML.attribute n elem
+
+data LinkSpec =
+  LinkSpec
+    { elemSelector :: Text
+    , linkHrefExtraction :: Extraction
+    , linkLabelExtraction :: Extraction
+    }
+
+instance JSON.FromJSON LinkSpec where
+  parseJSON j = JSON.withObject "LinkSpec" goObj j
+    where
+      goObj obj = do
+        LinkSpec
+          <$> obj .: "select"
+          <*> obj .:? "href" .!= (Extraction Nothing (ExtractAttribute "href"))
+          <*> obj .:? "label" .!= (Extraction Nothing ExtractText)
+
+extractLinks :: LinkSpec -> XML.Cursor -> [(Text, URL)]
+extractLinks spec root = do
+  sel <- Text.unpack . Text.strip <$> Text.splitOn "," (elemSelector spec)
+  elem <- XML.query sel root
+  label <- maybeToList $ extract (linkLabelExtraction spec) elem
+  href <- maybeToList $ extract (linkHrefExtraction spec) elem
+  url <- either (const []) return $ parseURL href
+  return (label, url)
+
 htmlScrapingProvider :: Maybe Text
                      -> Text -- ^ root URL
                      -> Text -- ^ landing path
-                     -> Text -- ^ selector for folder links
-                     -> Maybe String -- ^ selector for extracting folder URL from folder link
-                     -> Maybe Text -- ^ attribute name for extracting folder URL from folder link
-                     -> Maybe String -- ^ selector for extracting folder label from folder link
-                     -> Maybe Text -- ^ attribute name for extracting folder label from folder link
-                     -> Text -- ^ selector for document links
-                     -> Maybe String -- ^ selector for extracting document URL from document link
-                     -> Maybe Text -- ^ attribute name for extracting document URL from document link
-                     -> Maybe String -- ^ selector for extracting document label from document link
-                     -> Maybe Text -- ^ attribute name for extracting document label from document link
+                     -> LinkSpec -- ^ folders
+                     -> LinkSpec -- ^ documents
                      -> Provider
-htmlScrapingProvider
-  mlabel
-  rootUrlStr landingPath
-  folderSel folderUrlSel folderUrlAttrib folderLabelSel folderLabelAttrib
-  documentSel documentUrlSel documentUrlAttrib documentLabelSel documentLabelAttrib =
+htmlScrapingProvider mlabel rootUrlStr landingPath folderSpec documentSpec =
   Provider
     { label = mlabel
     , getPdfPage = \filenameEnc page -> do
@@ -62,68 +113,37 @@ htmlScrapingProvider
             actualURL = either error id . parseURL $ actualPath
         (parentPath, document) <- fetchListing (renderURL $ rootURL <> actualURL)
         let currentURL = either error id $ parseURL parentPath
-        let root = HTML.fromDocument document
-            folderInfos = captureLinks
-                            currentURL
-                            providerID
-                            Directory
-                            folderSel
-                            folderUrlSel
-                            folderUrlAttrib
-                            folderLabelSel
-                            folderLabelAttrib
-                            root
-            documentInfos = captureLinks
-                              currentURL
-                              providerID
-                              PDFFile
-                              documentSel
-                              documentUrlSel
-                              documentUrlAttrib
-                              documentLabelSel
-                              documentLabelAttrib
-                              root
+        let root = XML.fromDocument document
+            folderInfos =
+              map
+                (makeLink True currentURL providerID)
+                (extractLinks folderSpec root)
+            documentInfos =
+              map
+                (makeLink False currentURL providerID)
+                (extractLinks documentSpec root)
         return $ folderInfos ++ documentInfos
     }
     where
-      lookupAttrib :: Maybe Text -> HTML.Cursor -> Text
-      lookupAttrib Nothing e = LText.toStrict $ HTML.innerText e
-      lookupAttrib (Just attrib) e = mconcat $ HTML.attribute (XML.Name attrib Nothing Nothing) e
-
       rootURL :: URL
       rootURL = either error id $ parseURL rootUrlStr
 
-      captureLinks :: URL
-                   -> Text
-                   -> FileType
-                   -> Text
-                   -> Maybe String
-                   -> Maybe Text
-                   -> Maybe String
-                   -> Maybe Text
-                   -> HTML.Cursor
-                   -> [FileInfo]
-      captureLinks currentURL providerID fty elemSels urlSel urlAttrib labelSel labelAttrib root =
-        let elems = concatMap (\elemSel -> HTML.query elemSel root) (map Text.unpack . Text.splitOn "," $ elemSels)
-            links = catMaybes $ for elems (\e -> do
-                      label <- lookupAttrib labelAttrib <$> maybe Just HTML.query1 labelSel e
-                      path <- lookupAttrib urlAttrib <$> maybe Just HTML.query1 urlSel e
-                      url <- either (const Nothing) Just $ parseURL path
-                      let fullURL = currentURL <> url
-                          absURL = fullURL
-                                    { urlHostName = Nothing
-                                    , urlProtocol = Nothing
-                                    }
-                      return (label, renderURL absURL))
-            extend = if fty == Directory then id else (<.> "pdf")
-        in [ FileInfo
-               { fileName = Text.unwords . Text.words $ label
-               , filePath =
-                  extend $ Text.unpack providerID </> (urlEncode . Text.unpack $ path)
-               , fileType = fty
-               }
-           | (label, path) <- links
-           ]
+      makeLink :: Bool -> URL -> Text -> (Text, URL) -> FileInfo
+      makeLink isDir currentURL providerID (label, linkUrl) =
+        FileInfo
+           { fileName = Text.unwords . Text.words $ label
+           , filePath = if isDir then path else path <.> ".pdf"
+           , fileType = if isDir then Directory else PDFFile
+           }
+        where
+          -- relative URLs resolved against current URL, and then made
+          -- hostname-relative
+          url :: URL
+          url = (currentURL <> linkUrl)
+                  { urlHostName = Nothing, urlProtocol = Nothing }
+
+          path :: FilePath
+          path = Text.unpack providerID </> (urlEncode . Text.unpack $ renderURL url)
 
 fetchListing :: Text -> IO (Text, XML.Document)
 fetchListing url = do
@@ -146,9 +166,9 @@ fetchListing url = do
         metaRefresh =
           map (combineURLs url) .
           catMaybes .
-          map (parseMetaRefresh . mconcat . HTML.attribute "content") .
-          HTML.query "meta[http-equiv=Refresh]" .
-          HTML.fromDocument $
+          map (parseMetaRefresh . mconcat . XML.attribute "content") .
+          XML.query "meta[http-equiv=Refresh]" .
+          XML.fromDocument $
           document
     case metaRefresh of
       url':_ ->
@@ -180,3 +200,6 @@ combineURLs current new =
     currentURL <- parseURL current
     newURL <- parseURL new
     return $ renderURL (currentURL <> newURL)
+
+uqName :: Text -> XML.Name
+uqName t = XML.Name t Nothing Nothing
