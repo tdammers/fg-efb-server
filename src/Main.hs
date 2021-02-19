@@ -89,9 +89,13 @@ app providers = do
       Nothing -> Scotty.next
       Just provider -> do
         page <- Scotty.param "p" `Scotty.rescue` const (return 0)
-        body <- Scotty.liftAndCatchIO $ getPdfPage provider filename page
-        Scotty.setHeader "Content-type" "image/jpeg"
-        Scotty.raw body
+        mbody <- Scotty.liftAndCatchIO $ getPdfPage provider filename page
+        case mbody of
+          Nothing ->
+            Scotty.next
+          Just body -> do
+            Scotty.setHeader "Content-type" "image/jpeg"
+            Scotty.raw body
 
   Scotty.get (Scotty.regex "^.*$") $ do
     -- path <- Scotty.param "0"

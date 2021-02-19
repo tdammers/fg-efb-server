@@ -9,7 +9,7 @@ data Provider =
   Provider
     { label :: Maybe Text
     , listFiles :: Text -> FilePath -> IO [FileInfo]
-    , getPdfPage :: FilePath -> Int -> IO LBS.ByteString
+    , getPdfPage :: FilePath -> Int -> IO (Maybe LBS.ByteString)
     }
 
 data FileInfo =

@@ -1,5 +1,6 @@
 {-#LANGUAGE TypeApplications #-}
 {-#LANGUAGE LambdaCase #-}
+{-#LANGUAGE OverloadedStrings #-}
 module FGEFB.LoadPDF
 where
 
@@ -18,63 +19,86 @@ import System.Directory (doesFileExist)
 import Text.Printf (printf)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
+import Data.Bool (bool)
 
-downloadPdfPageHttp :: Text -> IO FilePath
-downloadPdfPageHttp url = do
-  printf "Load PDF: %s\n" url
-  rq <- HTTP.parseRequest (Text.unpack url)
-  tmpdir <- do
-    lookupEnv "PDFCACHE" >>= \case
-      Nothing ->
-        getCanonicalTemporaryDirectory
-      Just dir ->
-        return dir
-  printf "Cache dir: %s\n" tmpdir
+getCacheDir :: IO FilePath
+getCacheDir = do
+  lookupEnv "PDFCACHE" >>= \case
+    Nothing -> getCanonicalTemporaryDirectory
+    Just dir -> return dir
+
+getCacheFilename :: Text -> FilePath -> IO FilePath
+getCacheFilename url extension = do
+  tmpdir <- getCacheDir
   let basename = show (Crypto.hash (encodeUtf8 url) :: Crypto.Digest SHA512)
-      filename = tmpdir </> ("fgefb-cache-" ++  basename) <.> "pdf"
-  putStrLn filename
+  return $ tmpdir </> ("fgefb-cache-" ++  basename) <.> extension
+
+downloadPdfPageHttp :: Text -> FilePath -> IO ()
+downloadPdfPageHttp url filename = do
+  printf "Load PDF: %s\n" url
   doesFileExist filename >>= \case
     False -> do
+      rq <- HTTP.parseRequest (Text.unpack url)
       printf "HTTP %s -> %s\n" url filename
       rp <- HTTP.httpBS rq
       BS.writeFile filename (HTTP.getResponseBody rp)
     _ -> do
       printf "FILE %s\n" filename
       return ()
-  return filename
 
-loadPdfPageHttp :: Text -> Int -> IO LBS.ByteString
+loadPdfPageHttp :: Text -> Int -> IO (Maybe LBS.ByteString)
 loadPdfPageHttp url page = do
   printf "Requested PDF: %s [%i]\n" url page
-  filename <- downloadPdfPageHttp url
-  putStrLn filename
-  loadPdfPage filename page
+  jpgFilename <- getCacheFilename (url <> "$" <> (Text.pack . show $ page)) ".jpg"
+  doesFileExist jpgFilename >>= \case
+    True -> do
+      printf "JPG FILE %s FOUND\n" jpgFilename
+      Just . LBS.fromStrict <$> BS.readFile jpgFilename
 
-loadPdfPage :: FilePath -> Int -> IO LBS.ByteString
+    False -> do
+      printf "JPG FILE %s NOT FOUND\n" jpgFilename
+      pdfFilename <- getCacheFilename url ".pdf"
+      downloadPdfPageHttp url pdfFilename
+      convertPdfPage pdfFilename page jpgFilename >>= bool
+          (return Nothing)
+          (Just . LBS.fromStrict <$> BS.readFile jpgFilename)
+
+loadPdfPage :: FilePath -> Int -> IO (Maybe LBS.ByteString)
 loadPdfPage path page = do
+  jpgFilename <- getCacheFilename (Text.pack $ path <> show page) ".jpg"
+  doesFileExist jpgFilename >>= \case
+    True -> do
+      printf "JPG FILE %s FOUND\n" jpgFilename
+      Just . LBS.fromStrict <$> BS.readFile jpgFilename
+    False -> do
+      printf "JPG FILE %s NOT FOUND\n" jpgFilename
+      convertPdfPage path page jpgFilename >>= bool
+          (return Nothing)
+          (Just . LBS.fromStrict <$> BS.readFile jpgFilename)
+
+convertPdfPage :: FilePath -> Int -> FilePath -> IO Bool
+convertPdfPage path page output = do
+  printf "CONVERT %s\n" path
   let cp = (Process.proc "convert"
             [ "-background", "white"
             , "-density"
-            , "150"
+            , "300"
             , path ++ "[" ++ show page ++ "]"
             , "-alpha", "off"
             , "-colorspace", "RGB"
             , "-depth", "24"
             , "-quality", "99"
-            , "jpg:-"
+            , "jpg:" ++ output
             ]
           )
-          { Process.std_out = Process.CreatePipe
+          { Process.std_out = Process.Inherit
           , Process.std_err = Process.Inherit
           }
-  Process.withCreateProcess cp $ \_ mout _ ph -> do
-      case mout of
-        Nothing ->
-          error "Something bad happened."
-        Just out -> do
-          result <- LBS.fromStrict <$> BS.hGetContents out
-          Process.waitForProcess ph >>= \case
-            ExitSuccess ->
-              return result
-            ExitFailure e ->
-              error "Something bad happened."
+  Process.withCreateProcess cp $ \_ _ _ ph -> do
+    Process.waitForProcess ph >>= \case
+      ExitSuccess ->
+        return True
+      ExitFailure 1 ->
+        return False
+      ExitFailure e ->
+        error "Something bad happened."
