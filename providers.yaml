@@ -12,7 +12,8 @@ BI:
     - select: 'frame[name=eAISNavigation]'
       href: '@src'
       label: '@name'
-    - select: '.H3 a[title]'
+    - select: '#AD2013022615250806550004details .H3 a[title]'
+    - select: '#AD2013022615371604540000details .H3 a[title]'
   documents:
     - select: 'td div.graphic-box a'
       format:
@@ -59,6 +60,21 @@ ES:
   documents:
     - select: 'a.document-link'
       label: 'span.document-name'
+LF:
+  label: "LFxx: France SIA"
+  type: html
+  url: 'https://www.sia.aviation-civile.gouv.fr'
+  start: '/dvd/eAIP_{airac.day2}_{airac.monthNameU3}_{airac.year}/FRANCE/AIRAC-{airac.year}-{airac.month2}-{airac.day2}/html/eAIP/FR-menu-fr-FR.html'
+  folders:
+    - select: 'div#AD-2-IFRdetails div.H3 a[href!="#"]'
+    - select: 'div#AD-2-VFRdetails div.H3 a[href!="#"]'
+    - select: 'div#AD-2-MILdetails div.H3 a[href!="#"]'
+  documents:
+    - select: 'div.graphic-box a'
+      format:
+        - 'basename'
+        - split: '-'
+        - split: '_'
 # # Following doesn't work, because Germany decided to publish their charts as
 # # PNG images embedded in HTML documents, encoded in `data:` URLs.
 # ED:

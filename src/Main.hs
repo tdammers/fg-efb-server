@@ -27,6 +27,7 @@ import Data.Maybe (fromMaybe)
 
 import FGEFB.Provider
 import FGEFB.Providers
+import FGEFB.Airac
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
@@ -154,7 +155,10 @@ runServerWith providers =
 
 runServer :: IO ()
 runServer = do
-  providers <- YAML.decodeFileThrow "./providers.yaml"
+  airac <- YAML.decodeFileThrow "./airac.yaml"
+  providerFactories <- YAML.decodeFileThrow "./providers.yaml"
+  let context = defProviderContext { contextAirac = airac }
+      providers = fmap (\factory -> makeProvider factory context) providerFactories
 
   runServerWith providers
 

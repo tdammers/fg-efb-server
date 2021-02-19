@@ -6,29 +6,35 @@ import FGEFB.Provider
 import FGEFB.Providers.LocalFileProvider
 import FGEFB.Providers.NavaidJsonProvider
 import FGEFB.Providers.HtmlScrapingProvider
+import FGEFB.Airac
 
 import qualified Data.Aeson as JSON
 import Data.Aeson ( (.:), (.:?), (.!=) )
 import Data.Text (Text)
 import qualified Data.Text as Text
 
-instance JSON.FromJSON Provider where
-  parseJSON x = JSON.withObject "Provider" goObj x
+newtype ProviderFactory =
+  ProviderFactory
+    { makeProvider :: ProviderContext -> Provider
+    }
+
+instance JSON.FromJSON ProviderFactory where
+  parseJSON x = JSON.withObject "ProviderFactory" goObj x
     where
       goObj obj = do
         label <- obj .: "label"
         tag <- obj .: "type"
         case tag :: Text of
           "file" ->
-            localFileProvider label <$> obj .: "path"
+            ProviderFactory . const . localFileProvider label <$> obj .: "path"
           "navaid" ->
-            navaidJsonProvider label <$> obj .: "template"
+            ProviderFactory . const . navaidJsonProvider label <$> obj .: "template"
           "html" -> do
             root <- obj .: "url"
             landing <- obj .: "start" .!= "/"
             folderSel <- obj .: "folders"
             documentSel <- obj .: "documents"
-            return $
-              htmlScrapingProvider label root landing folderSel documentSel
+            return . ProviderFactory $ \resolveVar -> 
+              htmlScrapingProvider resolveVar label root landing folderSel documentSel
           _ ->
             fail "Invalid tag"

@@ -32,10 +32,12 @@ import Debug.Trace (trace, traceShow)
 import qualified Data.Vector as Vector
 import Data.List (foldl')
 import Text.Casing as Casing
+import Data.Time
 
 import FGEFB.Provider
 import FGEFB.LoadPDF
 import FGEFB.URL (renderURL, parseURL, URL (..))
+import FGEFB.Airac
 
 data Extraction =
   Extraction
@@ -138,14 +140,14 @@ extractLinks spec root = do
   url <- either (const []) return $ parseURL href
   return (label, url)
 
-htmlScrapingProvider :: Maybe Text
+htmlScrapingProvider :: ProviderContext
+                     -> Maybe Text
                      -> Text -- ^ root URL
                      -> Text -- ^ landing path
                      -> [LinkSpec] -- ^ folders
                      -> [LinkSpec] -- ^ documents
                      -> Provider
-htmlScrapingProvider mlabel rootUrlStr landingPath folderSpecs documentSpecs =
-  traceShow documentSpecs $
+htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSpecs documentSpecs =
   Provider
     { label = mlabel
     , getPdfPage = \filenameEnc page -> do
@@ -154,7 +156,6 @@ htmlScrapingProvider mlabel rootUrlStr landingPath folderSpecs documentSpecs =
         loadPdfPageHttp (renderURL $ rootURL <> localURL) page
     , listFiles = \providerID pathEnc -> do
         let path = urlDecode pathEnc
-        putStrLn path
         let actualPath = if null path then landingPath else Text.pack path
             actualURL = either error id . parseURL $ actualPath
         (parentPath, document) <- fetchListing (renderURL $ rootURL <> actualURL)
@@ -175,13 +176,19 @@ htmlScrapingProvider mlabel rootUrlStr landingPath folderSpecs documentSpecs =
         return $ folderInfos ++ documentInfos
     }
     where
+      vars = makeVars context
+
+      rootUrlStr :: Text
+      rootUrlStr = interpolateVars vars rootUrlTemplate
+
+      landingPath :: Text
+      landingPath = interpolateVars vars landingPathTemplate
+
       rootURL :: URL
       rootURL = either error id $ parseURL rootUrlStr
 
       makeLink :: Bool -> URL -> Text -> (Text, URL) -> FileInfo
       makeLink isDir currentURL providerID (label, linkUrl) =
-        trace (show currentURL) $
-        trace (printf "makeLink: %s %s\n" (renderURL currentURL) (renderURL linkUrl)) $
         FileInfo
            { fileName = Text.unwords . Text.words $ label
            , filePath = if isDir then path else path <.> ".pdf"
@@ -256,3 +263,32 @@ combineURLs current new =
 
 uqName :: Text -> XML.Name
 uqName t = XML.Name t Nothing Nothing
+
+tshow :: Show a => a -> Text
+tshow = Text.pack . show
+
+makeVars :: ProviderContext -> [(Text, Text)]
+makeVars context =
+  [ ("{airac.ident}", tshow . airacIdent . contextAirac $ context)
+  , ("{airac.year}", tshow airacYear)
+  , ("{airac.month}", tshow airacMonth)
+  , ("{airac.month2}", Text.pack $ printf "%02d" airacMonth)
+  , ("{airac.monthNameU3}", monthNameAiracU3 airacMonth)
+  , ("{airac.day}", tshow airacDay)
+  , ("{airac.day2}", Text.pack $ printf "%02d" airacDay)
+  ]
+  where
+    (airacYear, airacMonth, airacDay) = toGregorian . airacDate . contextAirac $ context
+
+monthNameAiracU3 :: Int -> Text
+monthNameAiracU3 m =
+  cycle names !! m
+  where
+    names = ["DEC", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV"]
+
+interpolateVars :: [(Text, Text)] -> Text -> Text
+interpolateVars vars template =
+  foldl' (flip interpolateVar) template vars
+
+interpolateVar :: (Text, Text) -> Text -> Text
+interpolateVar = uncurry Text.replace

@@ -1,0 +1,5 @@
+packages: .
+source-repository-package
+    type: git
+    location: https://github.com/tdammers/dom-selector
+    tag: 64c6c7dbbdb6893edd3be72018e3ab80f30c21f2

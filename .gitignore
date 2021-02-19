@@ -2,3 +2,4 @@ dist-newstyle
 .sw[op]
 .*.sw[op]
 cache
+tags
