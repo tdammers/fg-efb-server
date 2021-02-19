@@ -79,26 +79,25 @@ loadPdfPage path page = do
 convertPdfPage :: FilePath -> Int -> FilePath -> IO Bool
 convertPdfPage path page output = do
   printf "CONVERT %s\n" path
-  let cp = (Process.proc "convert"
-            [ "-background", "white"
-            , "-density"
-            , "300"
-            , path ++ "[" ++ show page ++ "]"
-            , "-alpha", "off"
-            , "-colorspace", "RGB"
-            , "-depth", "24"
-            , "-quality", "99"
-            , "jpg:" ++ output
-            ]
-          )
-          { Process.std_out = Process.Inherit
-          , Process.std_err = Process.Inherit
-          }
-  Process.withCreateProcess cp $ \_ _ _ ph -> do
-    Process.waitForProcess ph >>= \case
-      ExitSuccess ->
-        return True
-      ExitFailure 1 ->
-        return False
-      ExitFailure e ->
-        error "Something bad happened."
+  (exitCode, out, err) <-
+      Process.readProcessWithExitCode "convert"
+          [ "-background", "white"
+          , "-density"
+          , "300"
+          , path ++ "[" ++ show page ++ "]"
+          , "-alpha", "off"
+          , "-colorspace", "RGB"
+          , "-depth", "24"
+          , "-quality", "90"
+          , output
+          ]
+          ""
+  case exitCode of
+    ExitSuccess -> do
+      return True
+    ExitFailure 1 -> do
+      putStrLn err
+      return False
+    ExitFailure e -> do
+      putStrLn err
+      error "Something bad happened."
