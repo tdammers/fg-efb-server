@@ -20,7 +20,7 @@ import qualified Data.ByteString as BS
 import System.Environment (getArgs, setEnv, lookupEnv)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import System.FilePath ( takeExtension, takeBaseName )
+import System.FilePath ( takeExtension, takeBaseName, (</>) )
 import System.IO.Temp (withSystemTempDirectory)
 import qualified Data.Yaml as YAML
 import Data.Maybe (fromMaybe)
@@ -32,9 +32,7 @@ import FGEFB.Airac
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
   case (filter (not . Text.null) (Wai.pathInfo rq)) of
-    [] ->
-      Nothing
-    providerID:pathItems ->
+    "api":providerID:pathItems ->
       if null pathItems then
         Just
           [ ("provider", LText.fromStrict providerID)
@@ -47,13 +45,12 @@ captureListing rq =
           ]
       else
         Nothing
+    _ -> Nothing
 
 capturePDF :: Wai.Request -> Maybe [Scotty.Param]
 capturePDF rq =
   case (filter (not . Text.null) (Wai.pathInfo rq)) of
-    [] ->
-      Nothing
-    providerID:pathItems ->
+    "files":providerID:pathItems ->
       if null pathItems then
         Nothing
       else if takeExtension (Text.unpack $ last pathItems) == ".pdf" then
@@ -63,11 +60,24 @@ capturePDF rq =
           ]
       else
         Nothing
+    _ -> Nothing
 
 app :: Map Text Provider -> ScottyM ()
 app providers = do
-  -- list providers
   Scotty.get "/" $ do
+    Scotty.headers >>= Scotty.liftAndCatchIO . print
+    Scotty.redirect "/api"
+
+  Scotty.get "/static/style.css" $ do
+    Scotty.setHeader "Content-Type" "text/css"
+    Scotty.file "./static/style.css"
+
+  Scotty.get "/static/style.xsl" $ do
+    Scotty.setHeader "Content-Type" "text/css"
+    Scotty.file "./static/style.xsl"
+
+  -- list providers
+  Scotty.get "/api" $ do
     Scotty.setHeader "Content-type" "text/xml"
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $ xmlProviderList providers
     
@@ -106,10 +116,21 @@ app providers = do
 xmlFragmentToDocument :: XML.Element -> XML.Document
 xmlFragmentToDocument docroot =
   XML.Document
-    { XML.documentPrologue = XML.Prologue [] Nothing []
+    { XML.documentPrologue = prologue
     , XML.documentEpilogue = []
     , XML.documentRoot = docroot
     }
+    where
+      prologue =
+        XML.Prologue
+          [ XML.MiscInstruction
+              XML.Instruction
+                { XML.instructionTarget = "xml-stylesheet"
+                , XML.instructionData = "type=\"text/xml\" href=\"/static/style.xsl\""
+                }
+          ]
+          Nothing
+          []
 
 xmlFileList :: [FileInfo] -> XML.Element
 xmlFileList files =
@@ -118,15 +139,22 @@ xmlFileList files =
 xmlFileEntry :: FileInfo -> XML.Node
 xmlFileEntry info =
     XML.NodeElement $
-      XML.Element (if fileType info == Directory then "directory" else "file")
+      XML.Element rootElemName
         []
         [ XML.NodeElement $ XML.Element "name" [] [ XML.NodeContent (fileName info) ]
-        , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent (Text.pack $ filePath info) ]
-        , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent (fileTypeString $ fileType info) ]
+        , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent (Text.pack $ prefix </> filePath info) ]
+        , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent fileTypeString ]
         ]
     where
-      fileTypeString Directory = "dir"
-      fileTypeString PDFFile = "pdf"
+      fileTypeString = case fileType info of
+        Directory -> "dir"
+        PDFFile -> "pdf"
+      prefix = case fileType info of
+        Directory -> "/api"
+        PDFFile -> "/files"
+      rootElemName = case fileType info of
+        Directory -> "directory"
+        PDFFile -> "file"
 
 xmlProviderList :: Map Text Provider -> XML.Element
 xmlProviderList providers =
@@ -137,7 +165,7 @@ xmlProviderEntry (key, provider) =
   xmlFileEntry
     FileInfo
       { fileName = fromMaybe key (label provider)
-      , filePath = "/" ++ Text.unpack key
+      , filePath = Text.unpack key
       , fileType = Directory
       }
 

@@ -1,0 +1,7 @@
+.listing {
+    list-style: disc;
+}
+
+.listing>.file,
+.listing>.directory {
+}
