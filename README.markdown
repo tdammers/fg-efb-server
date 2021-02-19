@@ -31,39 +31,99 @@ https://github.com/tdammers/E-jet-family-YV/blob/wip/efb/Documentation/EFB.markd
 
 Start the program with:
 
-    fg-efb-server SOURCE_SPEC ...
+    fg-efb-server
 
 This will start a web server; keep it running, and launch a suitable version of
 the FlightGear E-Jet (one that has the EFB on board).
 
-`SOURCE_SPEC` follows the format: *label*`$`*sourcetype*`$`*arg*`. Note that
-`$` is a special shell character, so you need to escape it (`\\$`), or put the
-whole spec in single quotes.
+## Data Sources Configuration
 
-The *label* can be anything you like; this is what
-the EFB will display inside FG.
+Data sources can be configured by editing the file `providers.yaml`. It should
+contain a dictionary of (arbitrary) keys to provider specs.
 
-*Sourcetype* must be one of:
+### Provider Spec Keys (all providers)
 
-- `file`: `arg` will be a local directory, and all the PDF files within it will
-  be served, following the directory layout.
-- `json`: `arg` should be a URL pattern, pointing to a JSON HTTP API following
-  the Naviair format, e.g.:
-    `https://aim.naviair.dk/umbraco/api/naviairapi/getnodesforparent?parentId={parentid}`
-  The special token `{parentid}` is a placeholder for a numeric parent ID; it
-  will be empty for the top-level listing, and hold the parent ID for all other
-  listings. The API should return listings as JSON lists of objects containing,
-  at the minimum, the following fields:
-  - `id` (number; the ID of the entry itself)
-  - `parentId` (number; the ID of the entry's parent; 0 if it's a top-level entry)
-  - `title` (string)
-  - `name` (string)
-  - `href` (the URL of the associated PDF file, if any; may be `null`)
-  - `isDir` (whether the entry is a directory)
-  - `hasChildren` (whether the entry has any children)
+- **`label: string`** - The label to be shown on the folder in-sim.
+- **`type: string`** - The provider type. Must be one of `"file"` (scan a
+  directory tree on a local disk), `"html"` (scrape from an HTML website on the
+  internet), `"navaid"` (load from a JSON HTTP API in the format used by the
+  Danish NavAID)
 
-You can define as many `SOURCE_SPEC`s as you like; they will be listed on the
-front page of the FlightBag app in the order specified.
+### `file` Spec Keys
+
+- **`path: string`** - An absolute file path pointing to the root directory you
+  want to expose.
+
+### `html` Spec Keys
+
+This one is probably the most complex one, as it needs to scrape HTML written
+for consumption by humans rather than machines. This also means that getting
+the configuration right for such a data source can be challenging.
+
+- **`url: string`** - The URL root for the data source (protocol and
+  hostname, e.g. `https://example.org`). This should not feature a trailing
+  slash.
+- **`start: string`** - The relative path to the start page, from the URL
+  root (e.g. `/eAIS/start`). This is the first page that the flightbag will
+  scrape when you open the data source.
+  
+  Any redirects will be followed, so for a typical eAIS website, it is a good
+  idea to point to some page that links to the current version of the eAIS,
+  rather than the eAIS itself (which usually has the release date encoded in
+  its URL somehow).
+- **`folders: [link-spec]`** - Specifies how to extract links to sub-folders
+  from an HTML document
+- **`documents: [link-spec]`** - Specifies how to extract links to PDF charts
+  from an HTML document
+
+Note that the `folders` and `documents` keys may contain several specs; they
+will be executed in order.
+A link spec may contain the following keys:
+
+- **`select: string`** - A CSS selector pointing to DOM nodes to find.
+  Example:
+    - `div#chart-list a.chart`: "look for `<a>` elements with class `chart`, inside
+      a `<div>` whose `id` is `chart-list`.
+- **`href: null|string|object`** - What to extract as the link URL ("href")
+  from any elements found. This can be one of the following:
+    - `null` or the empty string `""`: get the text content of the element
+    - A CSS selector string: get the text content of a child element
+    - A string consisting of the `"@"` character, followed by an attribute
+      name: get the value of that attribute from the element
+    - An object containing two keys:
+      - `child: string` - A CSS selector pointing to the child element to
+        extract from; if absent, look at the element itself.
+      - `attrib: string` - An attribute name (without `"@"`) to extract from;
+        if absent, use the text content.
+    If the entire `href` key is absent, it defaults to `"@href"` (get the
+    `href=` attribute from the element itself).
+- **`label: null|string|object`** - What to extract as the link label. The
+  format is the same as for `href`; however, it defaults to the text content,
+  rather than the `href=` attribute.
+- **`format: Format`** - Transformations to apply to the link label, to make it
+  prettier / more readable. `Format` can be any of the following:
+    - `"basename"`: take the "basename", that is, remove everything up to the
+      last path separator (slash), and strip the extension (e.g. `".pdf"`), if
+      any. Ex.: `"http://example.com/eais/chart-123.pdf"` -> `"chart-123"`.
+    - `"split-humps"`: parse as "camel case" or "Pascal case" (words without
+      spaces, using uppercase to signal word boundaries), and put spaces
+      between words. Ex.: `"ThisIsASentence"` -> `"This Is A Sentence"`.
+    - `{split: "separator"}`: Split on each occurrence of the `"separator"`,
+      and reassemble as words. Ex.:
+      `"this-is-a-sentence"` --(`{split: "-"}`)-> `"this is a sentence"`.
+    - `{replace: ["needle", "haystack"]}`: Replace each occurrence of the
+      `"needle"` with `"haystack"`. Ex.:
+      `"this-is-a-sentence"` --(`{replace: ["-", "."]}`)-> `"this.is.a.sentence"`.
+    - `[Format, Format, ...]`: A list of `Format`s is processed in order,
+      feeding the output from each formatting into the next formatting.
+
+Note that the `href`, `label`, and `format` keys only apply to elements
+selected through the `select` filter within the same link spec. This allows you
+to apply different extraction and formatting patterns to different types of
+links. For example, when extracting `<img>` tags, you will want to use
+the `src` attribute to get the URL, and the `title` attribute for a label;
+but when extracting `<a>` tags, you would want to use the `href` attribute for
+URLs, and the text content for labels.
 
 ## Caching
 

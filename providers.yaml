@@ -3,7 +3,7 @@ local:
   type: file
   path: /home/tobias/flightgear/charts
 BI:
-  label: "Iceland Samgöngustofa"
+  label: "BIxx: Iceland Samgöngustofa"
   type: html
   url: 'http://eaip.samgongustofa.is'
   start: '/'
@@ -20,7 +20,7 @@ BI:
         - split: '-'
         - split: '_'
 EH:
-  label: "Netherlands eAIP"
+  label: "EHxx: Netherlands eAIP"
   type: html
   url: 'https://www.lvnl.nl'
   start: '/informatie-voor-luchtvarenden/publicaties-voor-luchtvarenden'
@@ -46,11 +46,11 @@ EH:
         - replace: ['AD 2.', '']
         - replace: ['-', ' ']
 EK:
-  label: "Denmark NavAID"
+  label: "EKxx: Denmark NavAID"
   type: navaid
   template: 'https://aim.naviair.dk/umbraco/api/naviairapi/getnodesforparent?parentId={parentid}'
 ES:
-  label: "Sweden AROWeb"
+  label: "ESxx: Sweden AROWeb"
   type: html
   url: 'https://aro.lfv.se'
   start: '/Editorial/View/IAIP?folderId=79'
@@ -62,7 +62,7 @@ ES:
 # # Following doesn't work, because Germany decided to publish their charts as
 # # PNG images embedded in HTML documents, encoded in `data:` URLs.
 # ED:
-#   label: "Germany Luftfahrthandbuch"
+#   label: "EDxx: Germany Luftfahrthandbuch"
 #   type: html
 #   url: 'https://aip.dfs.de'
 #   start: '/basicIFR/'

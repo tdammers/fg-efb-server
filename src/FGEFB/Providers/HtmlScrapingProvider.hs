@@ -51,6 +51,8 @@ data ExtractionTarget
 
 instance JSON.FromJSON Extraction where
   parseJSON j = case j of
+    JSON.Null ->
+      return (Extraction Nothing ExtractText)
     JSON.String t ->
       case Text.take 1 t of
         "" -> return (Extraction Nothing ExtractText)
