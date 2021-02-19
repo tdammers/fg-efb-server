@@ -89,6 +89,9 @@ convertPdfPage path page output = do
           , "-colorspace", "RGB"
           , "-depth", "24"
           , "-quality", "90"
+          , "-thumbnail", "4096x4096"
+          , "-gravity", "center"
+          , "-extent", "4096x4096"
           , output
           ]
           ""
