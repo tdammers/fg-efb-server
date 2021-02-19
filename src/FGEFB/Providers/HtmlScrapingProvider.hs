@@ -117,6 +117,7 @@ data LinkSpec =
     , linkHrefExtraction :: Extraction
     , linkLabelExtraction :: Extraction
     , linkLabelFormat :: LabelFormat
+    , linkAutoFollow :: Bool
     }
     deriving (Show)
 
@@ -129,8 +130,9 @@ instance JSON.FromJSON LinkSpec where
           <*> obj .:? "href" .!= (Extraction Nothing (ExtractAttribute "href"))
           <*> obj .:? "label" .!= (Extraction Nothing ExtractText)
           <*> obj .:? "format" .!= LabelIdentity
+          <*> obj .:? "auto-follow" .!= False
 
-extractLinks :: LinkSpec -> XML.Cursor -> [(Text, URL)]
+extractLinks :: LinkSpec -> XML.Cursor -> [(Text, URL, Bool)]
 extractLinks spec root = do
   sel <- Text.unpack . Text.strip <$> Text.splitOn "," (elemSelector spec)
   elem <- XML.query sel root
@@ -138,7 +140,7 @@ extractLinks spec root = do
   let label = formatLabel (linkLabelFormat spec) labelRaw
   href <- maybeToList $ extract (linkHrefExtraction spec) elem
   url <- either (const []) return $ parseURL href
-  return (label, url)
+  return (label, url, linkAutoFollow spec)
 
 htmlScrapingProvider :: ProviderContext
                      -> Maybe Text
@@ -155,25 +157,37 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
             localURL = either error id . parseURL . Text.pack $ filename
         loadPdfPageHttp (renderURL $ rootURL <> localURL) page
     , listFiles = \providerID pathEnc -> do
-        let path = urlDecode pathEnc
-        let actualPath = if null path then landingPath else Text.pack path
-            actualURL = either error id . parseURL $ actualPath
-        (parentPath, document) <- fetchListing (renderURL $ rootURL <> actualURL)
-        let currentURL = either error id $ parseURL parentPath
-        let root = XML.fromDocument document
-            folderInfos =
-              concatMap (\folderSpec ->
-                map
-                  (makeLink True currentURL providerID)
-                  (extractLinks folderSpec root))
-                folderSpecs
-            documentInfos =
-              concatMap (\documentSpec ->
-                map
-                  (makeLink False currentURL providerID)
-                  (extractLinks documentSpec root))
-                documentSpecs
-        return $ folderInfos ++ documentInfos
+        let go :: Text -> IO [FileInfo]
+            go path = do
+              let actualPath = if Text.null path then landingPath else path
+                  actualURL = either error id . parseURL $ actualPath
+              (parentPath, document) <- fetchListing (renderURL $ rootURL <> actualURL)
+              let currentURL = either error id $ parseURL parentPath
+              let root = XML.fromDocument document
+                  folderLinks =
+                    concatMap
+                      (\folderSpec -> extractLinks folderSpec root)
+                      folderSpecs
+                  autofollowLinks = [ url | (_, url, True) <- folderLinks ]
+              case autofollowLinks of
+                [] -> do
+                  let folderInfos = map (makeLink True currentURL providerID) folderLinks
+                      documentInfos =
+                        concatMap (\documentSpec ->
+                          map
+                            (makeLink False currentURL providerID)
+                            (extractLinks documentSpec root))
+                          documentSpecs
+                  return $ folderInfos ++ documentInfos
+                linkUrl:_ -> do
+                  let url = (currentURL <> linkUrl)
+                          { urlHostName = Nothing, urlProtocol = Nothing }
+
+                  printf "Auto-following %s -> %s\n" path (renderURL url)
+                  go $ renderURL url
+        let path = Text.pack (urlDecode pathEnc)
+        go path
+        
     }
     where
       vars = makeVars context
@@ -187,8 +201,8 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
       rootURL :: URL
       rootURL = either error id $ parseURL rootUrlStr
 
-      makeLink :: Bool -> URL -> Text -> (Text, URL) -> FileInfo
-      makeLink isDir currentURL providerID (label, linkUrl) =
+      makeLink :: Bool -> URL -> Text -> (Text, URL, Bool) -> FileInfo
+      makeLink isDir currentURL providerID (label, linkUrl, _) =
         FileInfo
            { fileName = Text.unwords . Text.words $ label
            , filePath = if isDir then path else path <.> ".pdf"

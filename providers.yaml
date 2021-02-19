@@ -9,9 +9,11 @@ BI:
   start: '/'
   folders:
     - select: 'td.green>a,h3.toc a'
+      auto-follow: true
     - select: 'frame[name=eAISNavigation]'
       href: '@src'
       label: '@name'
+      auto-follow: true
     - select: '#AD2013022615250806550004details .H3 a[title]'
     - select: '#AD2013022615371604540000details .H3 a[title]'
   documents:
@@ -33,9 +35,12 @@ EH:
         - replace: ['eAIS', '']
         - replace: ['Menu', '']
         - 'split-humps'
+      auto-follow: true
     - select: 'div.H1>a#AD,div.H1>a#ENR,div.H1>a#GEN'
       label: '@title'
-    - select: 'a[title=eAIP],h3.toc a'
+    - select: 'a[title=eAIP]'
+      auto-follow: true
+    - select: 'h3.toc a'
       format:
         - replace: ['/', ' / ']
   documents:
