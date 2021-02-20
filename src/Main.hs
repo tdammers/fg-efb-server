@@ -24,6 +24,9 @@ import System.FilePath ( takeExtension, takeBaseName, (</>) )
 import System.IO.Temp (withSystemTempDirectory)
 import qualified Data.Yaml as YAML
 import Data.Maybe (fromMaybe)
+import Data.Cache (Cache, newCache)
+import qualified Data.Cache as Cache
+import Data.Hashable (Hashable)
 
 import FGEFB.Provider
 import FGEFB.Providers
@@ -42,8 +45,8 @@ capturePDF rq =
     "files":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ -> Nothing
 
-app :: Provider -> ScottyM ()
-app provider = do
+app :: Cache Text [FileInfo] -> Provider -> ScottyM ()
+app listingCache provider = do
   Scotty.get "/" $ do
     Scotty.headers >>= Scotty.liftAndCatchIO . print
     Scotty.redirect "/api"
@@ -59,7 +62,8 @@ app provider = do
   -- directory listings
   Scotty.get (Scotty.function captureListing) $ do
     dirname <- Scotty.param "path"
-    files <- Scotty.liftAndCatchIO $ listFiles provider dirname
+    files <- Scotty.liftAndCatchIO $
+      cached listingCache dirname $ listFiles provider dirname
     Scotty.setHeader "Content-type" "text/xml"
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
       xmlFileList files
@@ -80,6 +84,18 @@ app provider = do
     -- path <- Scotty.param "0"
     -- Scotty.liftAndCatchIO $ putStrLn path
     Scotty.next
+
+  where
+    cached :: (Eq k, Hashable k) => Cache k v -> k -> IO v -> IO v
+    cached cache key action = do
+      mfound <- Cache.lookup cache key
+      case mfound of
+        Just found ->
+          return found
+        Nothing -> do
+          value <- action
+          Cache.insert cache key value
+          return value
 
 xmlFragmentToDocument :: XML.Element -> XML.Document
 xmlFragmentToDocument docroot =
@@ -138,7 +154,7 @@ xmlProviderEntry (key, provider) =
       }
 
 runServerWith :: Map Text Provider -> IO ()
-runServerWith providers =
+runServerWith providers = do
   lookupEnv "PDFCACHE" >>= \case
     Nothing -> do
       withSystemTempDirectory "fg-efb-cache" $ \tmpdir -> do
@@ -147,7 +163,9 @@ runServerWith providers =
     Just _ -> do
       run
   where
-    run = scotty 7675 (app $ groupProvider (Just "FlightBag") providers)
+    run = do
+      listingCache <- newCache Nothing
+      scotty 7675 (app listingCache $ groupProvider (Just "FlightBag") providers)
 
 runServer :: IO ()
 runServer = do
