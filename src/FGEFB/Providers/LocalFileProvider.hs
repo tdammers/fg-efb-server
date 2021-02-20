@@ -16,15 +16,15 @@ import Control.Applicative ( (<|>) )
 import FGEFB.Provider
 import FGEFB.LoadPDF
 
-classifyFile :: Text -> FilePath -> FilePath -> FilePath -> IO (Maybe FileInfo)
-classifyFile providerID rootdir dirname f = do
+classifyFile :: FilePath -> FilePath -> FilePath -> IO (Maybe FileInfo)
+classifyFile rootdir dirname f = do
   let fullname = rootdir </> dirname </> f
-      qname = Text.unpack providerID </> dirname </> f
+      qname = dirname </> f
   doesDirectoryExist fullname >>= \case
     True ->
       return $
         Just FileInfo
-          { filePath = qname
+          { filePath = Text.pack qname
           , fileName = Text.pack f
           , fileType = Directory
           }
@@ -33,7 +33,7 @@ classifyFile providerID rootdir dirname f = do
         ".pdf" ->
           return $
             Just FileInfo
-              { filePath = qname
+              { filePath = Text.pack qname
               , fileName = Text.pack $ takeBaseName f
               , fileType = PDFFile
               }
@@ -43,11 +43,12 @@ localFileProvider :: Maybe Text -> FilePath -> Provider
 localFileProvider mlabel rootDir =
   Provider
     { label = mlabel <|> Just (Text.pack $ takeBaseName rootDir)
-    , listFiles = \providerID dirname -> do
-        listDirectory(rootDir </> dirname) >>=
-          (fmap catMaybes . mapM (classifyFile providerID rootDir dirname))
+    , listFiles = \dirnameT -> do
+        let dirname = Text.unpack dirnameT
+        listDirectory (rootDir </> dirname) >>=
+          (fmap catMaybes . mapM (classifyFile rootDir dirname))
     , getPdfPage = \filename page -> do
-        loadPdfPage (rootDir </> filename) page
+        loadPdfPage (rootDir </> Text.unpack filename) page
     }
 
 

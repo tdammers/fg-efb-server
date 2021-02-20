@@ -3,6 +3,7 @@ module FGEFB.Providers
 where
 
 import FGEFB.Provider
+import FGEFB.Providers.GroupProvider
 import FGEFB.Providers.LocalFileProvider
 import FGEFB.Providers.NavaidJsonProvider
 import FGEFB.Providers.HtmlScrapingProvider
@@ -34,7 +35,11 @@ instance JSON.FromJSON ProviderFactory where
             landing <- obj .: "start" .!= "/"
             folderSel <- obj .: "folders"
             documentSel <- obj .: "documents"
-            return . ProviderFactory $ \resolveVar -> 
-              htmlScrapingProvider resolveVar label root landing folderSel documentSel
+            return . ProviderFactory $ \context -> 
+              htmlScrapingProvider context label root landing folderSel documentSel
+          "group" -> do
+            subFactories <- obj .: "providers"
+            return . ProviderFactory $ \context ->
+              groupProvider label $ fmap (flip makeProvider context) subFactories
           _ ->
             fail "Invalid tag"

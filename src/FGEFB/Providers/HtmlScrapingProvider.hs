@@ -38,6 +38,7 @@ import FGEFB.Provider
 import FGEFB.LoadPDF
 import FGEFB.URL (renderURL, parseURL, URL (..))
 import FGEFB.Airac
+import FGEFB.Util
 
 data Extraction =
   Extraction
@@ -153,10 +154,10 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
   Provider
     { label = mlabel
     , getPdfPage = \filenameEnc page -> do
-        let filename = urlDecode . dropExtension $ filenameEnc
+        let filename = urlDecode . dropExtension . Text.unpack $ filenameEnc
             localURL = either error id . parseURL . Text.pack $ filename
         loadPdfPageHttp (renderURL $ rootURL <> localURL) page
-    , listFiles = \providerID pathEnc -> do
+    , listFiles = \pathEnc -> do
         let go :: Text -> IO [FileInfo]
             go path = do
               let actualPath = if Text.null path then landingPath else path
@@ -171,11 +172,11 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
                   autofollowLinks = [ url | (_, url, True) <- folderLinks ]
               case autofollowLinks of
                 [] -> do
-                  let folderInfos = map (makeLink True currentURL providerID) folderLinks
+                  let folderInfos = map (makeLink True currentURL) folderLinks
                       documentInfos =
                         concatMap (\documentSpec ->
                           map
-                            (makeLink False currentURL providerID)
+                            (makeLink False currentURL)
                             (extractLinks documentSpec root))
                           documentSpecs
                   return $ folderInfos ++ documentInfos
@@ -185,7 +186,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
 
                   printf "Auto-following %s -> %s\n" path (renderURL url)
                   go $ renderURL url
-        let path = Text.pack (urlDecode pathEnc)
+        let path = Text.pack . urlDecode . Text.unpack $ pathEnc
         go path
         
     }
@@ -201,11 +202,11 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
       rootURL :: URL
       rootURL = either error id $ parseURL rootUrlStr
 
-      makeLink :: Bool -> URL -> Text -> (Text, URL, Bool) -> FileInfo
-      makeLink isDir currentURL providerID (label, linkUrl, _) =
+      makeLink :: Bool -> URL -> (Text, URL, Bool) -> FileInfo
+      makeLink isDir currentURL (label, linkUrl, _) =
         FileInfo
            { fileName = Text.unwords . Text.words $ label
-           , filePath = if isDir then path else path <.> ".pdf"
+           , filePath = if isDir then path else (withString (<.> ".pdf")) path
            , fileType = if isDir then Directory else PDFFile
            }
         where
@@ -215,8 +216,8 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
           url = (currentURL <> linkUrl)
                   { urlHostName = Nothing, urlProtocol = Nothing }
 
-          path :: FilePath
-          path = Text.unpack providerID </> (urlEncode . Text.unpack $ renderURL url)
+          path :: Text
+          path = withString urlEncode $ renderURL url
 
 fetchListing :: Text -> IO (Text, XML.Document)
 fetchListing url = do
@@ -230,7 +231,9 @@ fetchListing url = do
       Nothing ->
         error "Missing location header"
       Just location -> do
-        let url' = decodeUtf8 location
+        let url' = renderURL $
+                    either error id (parseURL url) <>
+                    either error id (parseURL (decodeUtf8 location))
         if url' == url then
           error "Infinite redirection"
         else
@@ -277,9 +280,6 @@ combineURLs current new =
 
 uqName :: Text -> XML.Name
 uqName t = XML.Name t Nothing Nothing
-
-tshow :: Show a => a -> Text
-tshow = Text.pack . show
 
 makeVars :: ProviderContext -> [(Text, Text)]
 makeVars context =

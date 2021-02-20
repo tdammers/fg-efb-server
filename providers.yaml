@@ -2,7 +2,7 @@ local:
   label: "Local Disk"
   type: file
   path: /home/tobias/flightgear/charts
-K:
+K.sky:
   label: "Kxxx: USA (Skyvector)"
   type: html
   url: 'https://skyvector.com'

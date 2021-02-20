@@ -27,43 +27,23 @@ import Data.Maybe (fromMaybe)
 
 import FGEFB.Provider
 import FGEFB.Providers
+import FGEFB.Providers.GroupProvider
 import FGEFB.Airac
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
   case (filter (not . Text.null) (Wai.pathInfo rq)) of
-    "api":providerID:pathItems ->
-      if null pathItems then
-        Just
-          [ ("provider", LText.fromStrict providerID)
-          , ("path", "")
-          ]
-      else if takeExtension (Text.unpack $ last pathItems) /= ".pdf" then
-        Just
-          [ ("provider", LText.fromStrict providerID)
-          , ("path", LText.fromStrict $ Text.intercalate "/" $ pathItems)
-          ]
-      else
-        Nothing
+    "api":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ -> Nothing
 
 capturePDF :: Wai.Request -> Maybe [Scotty.Param]
 capturePDF rq =
   case (filter (not . Text.null) (Wai.pathInfo rq)) of
-    "files":providerID:pathItems ->
-      if null pathItems then
-        Nothing
-      else if takeExtension (Text.unpack $ last pathItems) == ".pdf" then
-        Just
-          [ ("provider", LText.fromStrict providerID)
-          , ("path", LText.fromStrict $ Text.intercalate "/" $ pathItems)
-          ]
-      else
-        Nothing
+    "files":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ -> Nothing
 
-app :: Map Text Provider -> ScottyM ()
-app providers = do
+app :: Provider -> ScottyM ()
+app provider = do
   Scotty.get "/" $ do
     Scotty.headers >>= Scotty.liftAndCatchIO . print
     Scotty.redirect "/api"
@@ -76,37 +56,24 @@ app providers = do
     Scotty.setHeader "Content-Type" "text/css"
     Scotty.file "./static/style.xsl"
 
-  -- list providers
-  Scotty.get "/api" $ do
-    Scotty.setHeader "Content-type" "text/xml"
-    Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $ xmlProviderList providers
-    
   -- directory listings
   Scotty.get (Scotty.function captureListing) $ do
-    providerID <- Scotty.param "provider"
     dirname <- Scotty.param "path"
-    case Map.lookup providerID providers of
-      Nothing -> Scotty.next
-      Just provider -> do
-        files <- Scotty.liftAndCatchIO $ listFiles provider providerID dirname
-        Scotty.setHeader "Content-type" "text/xml"
-        Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $ xmlFileList files
+    files <- Scotty.liftAndCatchIO $ listFiles provider dirname
+    Scotty.setHeader "Content-type" "text/xml"
+    Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $ xmlFileList files
 
   -- PDF pages
   Scotty.get (Scotty.function capturePDF) $ do
-    providerID <- Scotty.param "provider"
     filename <- Scotty.param "path"
-    case Map.lookup providerID providers of
-      Nothing -> Scotty.next
-      Just provider -> do
-        page <- Scotty.param "p" `Scotty.rescue` const (return 0)
-        mbody <- Scotty.liftAndCatchIO $ getPdfPage provider filename page
-        case mbody of
-          Nothing ->
-            Scotty.next
-          Just body -> do
-            Scotty.setHeader "Content-type" "image/jpeg"
-            Scotty.raw body
+    page <- Scotty.param "p" `Scotty.rescue` const (return 0)
+    mbody <- Scotty.liftAndCatchIO $ getPdfPage provider filename page
+    case mbody of
+      Nothing ->
+        Scotty.next
+      Just body -> do
+        Scotty.setHeader "Content-type" "image/jpeg"
+        Scotty.raw body
 
   Scotty.get (Scotty.regex "^.*$") $ do
     -- path <- Scotty.param "0"
@@ -142,7 +109,7 @@ xmlFileEntry info =
       XML.Element rootElemName
         []
         [ XML.NodeElement $ XML.Element "name" [] [ XML.NodeContent (fileName info) ]
-        , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent (Text.pack $ prefix </> filePath info) ]
+        , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent (prefix <> filePath info) ]
         , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent fileTypeString ]
         ]
     where
@@ -150,8 +117,8 @@ xmlFileEntry info =
         Directory -> "dir"
         PDFFile -> "pdf"
       prefix = case fileType info of
-        Directory -> "/api"
-        PDFFile -> "/files"
+        Directory -> "/api/"
+        PDFFile -> "/files/"
       rootElemName = case fileType info of
         Directory -> "directory"
         PDFFile -> "file"
@@ -165,7 +132,7 @@ xmlProviderEntry (key, provider) =
   xmlFileEntry
     FileInfo
       { fileName = fromMaybe key (label provider)
-      , filePath = Text.unpack key
+      , filePath = key
       , fileType = Directory
       }
 
@@ -179,7 +146,7 @@ runServerWith providers =
     Just _ -> do
       run
   where
-    run = scotty 7675 (app providers)
+    run = scotty 7675 (app $ groupProvider (Just "FlightBag") providers)
 
 runServer :: IO ()
 runServer = do

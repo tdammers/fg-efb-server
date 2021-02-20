@@ -14,6 +14,7 @@ import System.FilePath (takeBaseName, (</>), (<.>))
 
 import FGEFB.Provider
 import FGEFB.LoadPDF
+import FGEFB.Util
 
 data Entry =
   Entry
@@ -29,16 +30,15 @@ data Entry =
 
 JSON.deriveJSON JSON.defaultOptions {JSON.fieldLabelModifier = drop 6} 'Entry
 
-entryToFileInfo :: Text -> Entry -> FileInfo
-entryToFileInfo providerID entry =
+entryToFileInfo :: Entry -> FileInfo
+entryToFileInfo entry =
   FileInfo
     { fileName = entry_title entry
     , filePath =
-        Text.unpack providerID </>
-          if entry_isDir entry then
-            show (entry_id entry)
-          else
-            show (entry_parentId entry) </> show (entry_id entry) <.> "pdf"
+        if entry_isDir entry then
+          tshow (entry_id entry)
+        else
+          tshow (entry_parentId entry) <> "/" <> tshow (entry_id entry) <> ".pdf"
     , fileType =
         if entry_isDir entry then
           Directory
@@ -65,15 +65,15 @@ navaidJsonProvider :: Maybe Text -> Text -> Provider
 navaidJsonProvider mlabel urlPattern =
   Provider
     { label = mlabel
-    , listFiles = \providerID dirname -> do
+    , listFiles = \dirname -> do
         mparentID <- if dirname == "" then
                       return Nothing
-                    else maybe (error "Invalid parentID") (return . Just) $ readMaybe dirname
+                    else maybe (error "Invalid parentID") (return . Just) $ (readMaybe . Text.unpack) dirname
         entries <- getEntries mparentID urlPattern
         print entries
-        return $ map (entryToFileInfo providerID) entries
+        return $ map entryToFileInfo entries
     , getPdfPage = \filename page -> do
-        case Text.splitOn "/" (Text.pack filename) of
+        case Text.splitOn "/" filename of
           [parentStr, childStr] -> do
             parentID <- maybe (error "Invalid parentID") return . readMaybe . Text.unpack $ parentStr
             childID <- maybe (error "Invalid childID") return . readMaybe . takeBaseName . Text.unpack $ childStr

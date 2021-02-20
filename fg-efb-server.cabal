@@ -21,12 +21,14 @@ executable fg-efb-server
   main-is: Main.hs
   other-modules: FGEFB.Provider
                , FGEFB.Providers
+               , FGEFB.Providers.GroupProvider
                , FGEFB.Providers.LocalFileProvider
                , FGEFB.Providers.NavaidJsonProvider
                , FGEFB.Providers.HtmlScrapingProvider
                , FGEFB.LoadPDF
                , FGEFB.URL
                , FGEFB.Airac
+               , FGEFB.Util
   -- other-extensions:
   build-depends: base >=4.12 && <4.15
                , aeson >=1.5.5.1 && <1.6

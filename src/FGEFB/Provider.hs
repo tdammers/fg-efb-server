@@ -22,14 +22,14 @@ defProviderContext =
 data Provider =
   Provider
     { label :: Maybe Text
-    , listFiles :: Text -> FilePath -> IO [FileInfo]
-    , getPdfPage :: FilePath -> Int -> IO (Maybe LBS.ByteString)
+    , listFiles :: Text -> IO [FileInfo]
+    , getPdfPage :: Text -> Int -> IO (Maybe LBS.ByteString)
     }
 
 data FileInfo =
   FileInfo
     { fileName :: Text
-    , filePath :: FilePath
+    , filePath :: Text
     , fileType :: FileType
     }
     deriving (Show)
