@@ -2,6 +2,22 @@ local:
   label: "Local Disk"
   type: file
   path: /home/tobias/flightgear/charts
+K:
+  label: "Kxxx: USA (Skyvector)"
+  type: html
+  url: 'https://skyvector.com'
+  start: '/airports/United+States'
+  folders:
+    - select: '.view-content>.views-summary>a'
+      format:
+        - replace: ['- No value -', '(No value)']
+    - select: 'td.views-field-title>a'
+  documents:
+    - select: 'div.aptdata>a'
+      label:
+        child: 'img'
+        attrib: 'alt'
+    - select: '.aptdata>ul>li.apttpp>a'
 BI:
   label: "BIxx: Iceland Samgöngustofa"
   type: html
