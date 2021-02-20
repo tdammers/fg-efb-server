@@ -71,6 +71,35 @@ EK:
   label: "EKxx: Denmark NavAID"
   type: navaid
   template: 'https://aim.naviair.dk/umbraco/api/naviairapi/getnodesforparent?parentId={parentid}'
+EN:
+  label: "ENxx: Norway Avinor"
+  type: html
+  url: 'https://ais.avinor.no'
+  start: '/no/AIP/'
+  folders:
+    - select: '.history_pane a'
+      auto-follow: true
+    - select: 'frame[name=eAISNavigationBase]'
+      href: '@src'
+      auto-follow: true
+    - select: 'frame[name=eAISCommands][src=commands-no-NO.html]'
+      href: '@src'
+      auto-follow: true
+    - select: 'div.menu-items p.command a[href=index-en-GB.html]'
+      auto-follow: true
+    - select: 'frame[name=eAISNavigation][src^=eAIP/EN-menu]'
+      href: '@src'
+      auto-follow: true
+    - select: '#ADdetails #AD-2details>div.Hx>a[href!="#"]'
+      label: '@id'
+      format:
+        - replace: ['AD-2.', '']
+  documents:
+    - select: 'div[id$="2.24"] tr'
+      label: 'p,a'
+      href:
+        child: 'a[href$=".pdf"]'
+        attrib: 'href'
 ES:
   label: "ESxx: Sweden AROWeb"
   type: html

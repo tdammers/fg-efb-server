@@ -61,7 +61,8 @@ app provider = do
     dirname <- Scotty.param "path"
     files <- Scotty.liftAndCatchIO $ listFiles provider dirname
     Scotty.setHeader "Content-type" "text/xml"
-    Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $ xmlFileList files
+    Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
+      xmlFileList files
 
   -- PDF pages
   Scotty.get (Scotty.function capturePDF) $ do
