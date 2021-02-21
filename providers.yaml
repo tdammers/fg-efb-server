@@ -38,6 +38,22 @@ BI:
         - 'basename'
         - split: '-'
         - split: '_'
+EG:
+  label: "EGxx: United Kingdom NATS"
+  type: html
+  url: 'https://www.aurora.nats.co.uk'
+  start: '/htmlAIP/Publications/2021-01-28-AIRAC/html/eAIP/EG-menu-en-GB.html'
+  folders:
+    - select: '#ADdetails #AD-2details>div.Hx>a[href!="#"]'
+      label: '@id'
+      format:
+        - replace: ['AD-2.', '']
+  documents:
+    - select: 'div[id$="2.24"] tr'
+      # label: 'td p'
+      href:
+        child: '+tr a'
+        attrib: 'href'
 EH:
   label: "EHxx: Netherlands eAIP"
   type: html
