@@ -3,3 +3,5 @@ dist-newstyle
 .*.sw[op]
 cache
 tags
+defs.yaml
+providers.yaml

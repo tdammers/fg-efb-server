@@ -38,8 +38,20 @@ the FlightGear E-Jet (one that has the EFB on board).
 
 ## Data Sources Configuration
 
-Data sources can be configured by editing the file `providers.yaml`. It should
-contain a dictionary of (arbitrary) keys to provider specs.
+Data sources can be configured by editing the file `providers.yaml`. On
+UNIX-like systems, this file will be searched in:
+
+- `~/.config/fg-efb-server`
+- `~/.fg-efb-server`
+
+It should contain a dictionary of (arbitrary) keys to provider specs. See the
+enclosed `providers.yaml.dist` example file. If no `providers.yaml` file was
+found, a default configuration will be used, which exposes all directories and
+PDF files in the current directory.
+
+Some providers will interpolate variables into some of their configuration
+values; these variables can be defined in `defs.yaml`, in the same directory as
+the `providers.yaml` file.
 
 ### Provider Spec Keys (all providers)
 

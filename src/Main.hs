@@ -35,6 +35,7 @@ import Data.Bool (bool)
 import FGEFB.Provider
 import FGEFB.Providers
 import FGEFB.Providers.GroupProvider
+import FGEFB.Providers.LocalFileProvider
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
@@ -197,10 +198,20 @@ loadFirstConfigFileOrElse def filename = do
         hPutStrLn stderr $ "- " ++ show s
       return def
 
+defProviders :: Map Text ProviderFactory
+defProviders = [
+    ( "default"
+    , ProviderFactory $
+        const $
+          localFileProvider (Just "default") "."
+    )
+  ]
+  
+
 runServer :: IO ()
 runServer = do
-  defs <- loadFirstConfigFile "defs.yaml"
-  providerFactories <- loadFirstConfigFile "providers.yaml"
+  defs <- loadFirstConfigFileOrElse [] "defs.yaml"
+  providerFactories <- loadFirstConfigFileOrElse defProviders "providers.yaml"
   let context = defProviderContext { contextDefs = defs }
       providers = fmap (\factory -> makeProvider factory context) providerFactories
 

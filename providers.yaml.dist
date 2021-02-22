@@ -1,7 +1,7 @@
 local:
   label: "Local Disk"
   type: file
-  path: /home/tobias/flightgear/charts
+  path: '/home/myname/charts'
 K.sky:
   label: "Kxxx: USA (Skyvector)"
   type: html
