@@ -1,0 +1,10 @@
+airac:
+  # See https://www.nm.eurocontrol.int/RAD/common/airac_dates.html
+  ident: '2101'
+  date: '2021-01-28'
+  year: '2021'
+  month: '1'
+  month2: '01'
+  monthNameU3: 'JAN'
+  day: '28'
+  day2: '28'

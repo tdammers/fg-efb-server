@@ -15,6 +15,7 @@ import qualified Data.Text.Lazy as LText
 import Data.Default (def)
 import qualified System.Process as Process
 import System.Process (CreateProcess)
+import System.IO (hPutStrLn, stderr)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString as BS
 import System.Environment (getArgs, setEnv, lookupEnv)
@@ -23,15 +24,17 @@ import qualified Data.Map as Map
 import System.FilePath ( takeExtension, takeBaseName, (</>) )
 import System.IO.Temp (withSystemTempDirectory)
 import qualified Data.Yaml as YAML
-import Data.Maybe (fromMaybe)
+import qualified Data.Aeson as JSON
+import Data.Maybe (fromMaybe, catMaybes, listToMaybe)
 import Data.Cache (Cache, newCache)
 import qualified Data.Cache as Cache
 import Data.Hashable (Hashable)
+import System.Directory (doesFileExist, XdgDirectory (..), getXdgDirectory, getAppUserDataDirectory)
+import Data.Bool (bool)
 
 import FGEFB.Provider
 import FGEFB.Providers
 import FGEFB.Providers.GroupProvider
-import FGEFB.Airac
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
@@ -167,11 +170,38 @@ runServerWith providers = do
       listingCache <- newCache Nothing
       scotty 7675 (app listingCache $ groupProvider (Just "FlightBag") providers)
 
+findConfigFiles :: FilePath -> IO ([FilePath], [FilePath])
+findConfigFiles filename = do
+  xdg <- getXdgDirectory XdgConfig "fg-efb-server"
+  aud <- getAppUserDataDirectory "fg-efb-server"
+  let candidates = map (</> filename) [xdg, aud]
+  found <- mapM (\f -> bool Nothing (Just f) <$> doesFileExist f) candidates
+  return (candidates, catMaybes found)
+
+findFirstConfigFile :: FilePath -> IO ([FilePath], Maybe FilePath)
+findFirstConfigFile filename = fmap listToMaybe <$> findConfigFiles filename
+
+loadFirstConfigFile :: JSON.FromJSON a => FilePath -> IO a
+loadFirstConfigFile = loadFirstConfigFileOrElse (error "Configuration file not found")
+
+loadFirstConfigFileOrElse :: JSON.FromJSON a => a -> FilePath -> IO a
+loadFirstConfigFileOrElse def filename = do
+  (searched, mFile) <- findFirstConfigFile filename
+  case mFile of
+    Just f ->
+      YAML.decodeFileThrow f
+    Nothing -> do
+      hPutStrLn stderr $ "Configuration file not found: " ++ show filename
+      hPutStrLn stderr $ "Locations searched:"
+      forM_ searched $ \s -> do
+        hPutStrLn stderr $ "- " ++ show s
+      return def
+
 runServer :: IO ()
 runServer = do
-  airac <- YAML.decodeFileThrow "./airac.yaml"
-  providerFactories <- YAML.decodeFileThrow "./providers.yaml"
-  let context = defProviderContext { contextAirac = airac }
+  defs <- loadFirstConfigFile "defs.yaml"
+  providerFactories <- loadFirstConfigFile "providers.yaml"
+  let context = defProviderContext { contextDefs = defs }
       providers = fmap (\factory -> makeProvider factory context) providerFactories
 
   runServerWith providers

@@ -33,11 +33,11 @@ import qualified Data.Vector as Vector
 import Data.List (foldl')
 import Text.Casing as Casing
 import Data.Time
+import qualified Data.Map as Map
 
 import FGEFB.Provider
 import FGEFB.LoadPDF
 import FGEFB.URL (renderURL, parseURL, URL (..))
-import FGEFB.Airac
 import FGEFB.Util
 
 data Extraction =
@@ -133,8 +133,6 @@ matchLinkContext url spec =
 
 matchPatternContext :: URL -> Text -> Bool
 matchPatternContext url' pattern =
-  trace ("url: " ++ show (renderURL url)) $
-  trace ("pattern: " ++ show pattern) $
   case Text.take 1 pattern of
     "^" -> Text.drop 1 pattern `Text.isSuffixOf` renderURL url
     "!" -> not . matchPatternContext url $ Text.drop 1 pattern
@@ -212,7 +210,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
         
     }
     where
-      vars = makeVars context
+      vars = unpackVars (contextDefs context)
 
       rootUrlStr :: Text
       rootUrlStr = interpolateVars vars rootUrlTemplate
@@ -247,7 +245,7 @@ fetchListing url = do
   printf "HTTP %s\n" url
   rq <- HTTP.parseRequest (Text.unpack url)
   rp <- HTTP.httpLBS rq { HTTP.redirectCount = 0 }
-  printf "%i %s\n" (HTTP.getResponseStatusCode rp) (show $ HTTP.getResponseStatus rp)
+  printf "HTTP %i %s\n" (HTTP.getResponseStatusCode rp) (show $ HTTP.getResponseStatus rp)
   if HTTP.getResponseStatusCode rp `elem` redirectCodes then do
     let mlocation = lookup "Location" $ HTTP.getResponseHeaders rp
     case mlocation of
@@ -304,31 +302,13 @@ combineURLs current new =
 uqName :: Text -> XML.Name
 uqName t = XML.Name t Nothing Nothing
 
-makeVars :: ProviderContext -> [(Text, Text)]
-makeVars context =
-  [ ("{airac.ident}", tshow . airacIdent . contextAirac $ context)
-  , ("{airac.year}", tshow airacYear)
-  , ("{airac.month}", tshow airacMonth)
-  , ("{airac.month2}", Text.pack $ printf "%02d" airacMonth)
-  , ("{airac.monthNameU3}", monthNameAiracU3 airacMonth)
-  , ("{airac.day}", tshow airacDay)
-  , ("{airac.day2}", Text.pack $ printf "%02d" airacDay)
-  ]
-  where
-    (airacYear, airacMonth, airacDay) = toGregorian . airacDate . contextAirac $ context
-
-monthNameAiracU3 :: Int -> Text
-monthNameAiracU3 m =
-  cycle names !! m
-  where
-    names = ["DEC", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV"]
-
 interpolateVars :: [(Text, Text)] -> Text -> Text
 interpolateVars vars template =
   foldl' (flip interpolateVar) template vars
 
 interpolateVar :: (Text, Text) -> Text -> Text
-interpolateVar = uncurry Text.replace
+interpolateVar (k, v) =
+  Text.replace ("{" <> k <> "}") v
 
 jqQuery :: Text -> XML.Cursor -> [XML.Cursor]
 jqQuery q = XML.match $ XML.jqText' q

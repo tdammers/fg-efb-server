@@ -7,7 +7,6 @@ import FGEFB.Providers.GroupProvider
 import FGEFB.Providers.LocalFileProvider
 import FGEFB.Providers.NavaidJsonProvider
 import FGEFB.Providers.HtmlScrapingProvider
-import FGEFB.Airac
 
 import qualified Data.Aeson as JSON
 import Data.Aeson ( (.:), (.:?), (.!=) )

@@ -24,13 +24,10 @@ groupProvider mlabel providers = Provider
             Nothing -> return Nothing
             Just provider -> getPdfPage provider subpath page
   , listFiles = \path -> do
-      print path
       case Text.splitOn "/" path of
         [] -> return providerList
         [""] -> return providerList
         providerID:subpathItems -> do
-          print providerID
-          print subpathItems
           let subpath = Text.intercalate "/" subpathItems
           case Map.lookup providerID providers of
             Nothing -> return []
