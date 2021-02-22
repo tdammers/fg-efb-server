@@ -1,5 +1,5 @@
 packages: .
 source-repository-package
     type: git
-    location: https://github.com/tdammers/dom-selector
-    tag: 284a87df226eaa4938ae17accf81bb5f8e1ffb76
+    location: https://github.com/tdammers/xml-conduit-selectors
+    tag: d8fdd74e137e0ebcfdcc6f20fb5987d88b2d4db6

@@ -98,18 +98,16 @@ EN:
     - select: 'frame[name=eAISNavigationBase]'
       href: '@src'
       auto-follow: true
-    - select: 'frame[name=eAISCommands][src=commands-no-NO.html]'
+    - select: 'frame[name=eAISCommands][src="commands-no-NO.html"]'
       href: '@src'
       auto-follow: true
-    - select: 'div.menu-items p.command a[href=index-en-GB.html]'
+    - select: 'div.menu-items p.command a[href="index-en-GB.html"]'
       auto-follow: true
-    - select: 'frame[name=eAISNavigation][src^=eAIP/EN-menu]'
+    - select: 'frame[name=eAISNavigation][src^="eAIP/EN-menu"]'
       href: '@src'
       auto-follow: true
     - select: '#ADdetails #AD-2details>div.Hx>a[href!="#"]'
-      label: '@id'
-      format:
-        - replace: ['AD-2.', '']
+      label: '>:nth-child(2),>:nth-child(3)'
   documents:
     - select: 'div[id$="2.24"] tr'
       label: 'p,a'
@@ -122,10 +120,16 @@ ES:
   url: 'https://aro.lfv.se'
   start: '/Editorial/View/IAIP?folderId=79'
   folders:
-    - select: 'a.sortableFolder--rightArrow,a.folder-link'
+    - select: 'tr.sortableFolder-row'
+      label: 'a'
+      href:
+        child: 'a.sortableFolder--rightArrow'
+        href: '@href'
+    - select: 'a.folder-link'
+      label: 'span:not(.folder-arrow)'
   documents:
-    - select: 'a.document-link'
-      label: 'span.document-name'
+    - select: 'a.document-link[href^="/Editorial/View/"][href$="_en"]:has(span.document-prefix)'
+      label: 'span.document-prefix,span.document-name'
 LF:
   label: "LFxx: France SIA"
   type: html

@@ -18,8 +18,8 @@ import System.FilePath (takeBaseName, dropExtension, (</>), (<.>))
 import Control.Monad (when, forM)
 import qualified Text.HTML.DOM as HTML
 import qualified Text.XML.Cursor as XML
-import qualified Text.XML.Scraping as XML
-import qualified Text.XML.Selector as XML
+import qualified Text.XML.Selectors as XML
+import qualified Text.XML.Selectors.Parsers.JQ as XML
 import qualified Text.XML as XML
 import Data.Maybe (catMaybes, listToMaybe, maybeToList)
 import Network.HTTP.Base (urlEncode, urlDecode)
@@ -71,14 +71,14 @@ instance JSON.FromJSON Extraction where
                         Just a -> ExtractAttribute a
         return $ Extraction mselector target
 
-extract :: Extraction -> XML.Cursor -> Maybe Text
+extract :: Extraction -> XML.Cursor -> [Text]
 extract e root = do
-  elem <- (maybe Just (XML.query1 . Text.unpack) (extractionSelector e)) root
+  elem <- (maybe (:[]) jqQuery (extractionSelector e)) root
   case extractionTarget e of
     ExtractText ->
-      return (LText.toStrict $ XML.innerText elem)
+      return . textContent . XML.node $ elem
     ExtractAttribute n ->
-      listToMaybe $ XML.attribute n elem
+      XML.attribute n elem
 
 data LabelFormat
   = LabelIdentity
@@ -135,11 +135,11 @@ instance JSON.FromJSON LinkSpec where
 
 extractLinks :: LinkSpec -> XML.Cursor -> [(Text, URL, Bool)]
 extractLinks spec root = do
-  sel <- Text.unpack . Text.strip <$> Text.splitOn "," (elemSelector spec)
-  elem <- XML.query sel root
-  labelRaw <- maybeToList $ extract (linkLabelExtraction spec) elem
+  sel <- Text.strip <$> Text.splitOn "," (elemSelector spec)
+  elem <- jqQuery sel root
+  let labelRaw = Text.unwords $ extract (linkLabelExtraction spec) elem
   let label = formatLabel (linkLabelFormat spec) labelRaw
-  href <- maybeToList $ extract (linkHrefExtraction spec) elem
+  href <- extract (linkHrefExtraction spec) elem
   url <- either (const []) return $ parseURL href
   return (label, url, linkAutoFollow spec)
 
@@ -244,7 +244,7 @@ fetchListing url = do
           map (combineURLs url) .
           catMaybes .
           map (parseMetaRefresh . mconcat . XML.attribute "content") .
-          XML.query "meta[http-equiv=Refresh]" .
+          jqQuery ("meta[http-equiv=Refresh]" :: Text) .
           XML.fromDocument $
           document
     case metaRefresh of
@@ -306,3 +306,14 @@ interpolateVars vars template =
 
 interpolateVar :: (Text, Text) -> Text -> Text
 interpolateVar = uncurry Text.replace
+
+jqQuery :: Text -> XML.Cursor -> [XML.Cursor]
+jqQuery q = XML.match $ XML.jqText' q
+
+jqQuery1 :: Text -> XML.Cursor -> Maybe XML.Cursor
+jqQuery1 q = listToMaybe . jqQuery q
+
+textContent :: XML.Node -> Text
+textContent (XML.NodeContent t) = t
+textContent (XML.NodeElement (XML.Element _ _ children)) = mconcat . map textContent $ children
+textContent _ = ""
