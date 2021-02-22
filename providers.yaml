@@ -8,12 +8,12 @@ K.sky:
   url: 'https://skyvector.com'
   start: '/airports/United+States'
   folders:
-    - select: '.view-content>.views-summary>a'
-      format:
-        - replace: ['- No value -', '(No value)']
+    - select: '.view-content>.views-summary>a:not([href$="/United%20States/"])'
     - select: 'td.views-field-title>a'
+      format:
+        - replace: ['&amp;', '&']
   documents:
-    - select: 'div.aptdata>a'
+    - select: 'div.aptdata>a:has(img)'
       label:
         child: 'img'
         attrib: 'alt'
@@ -45,7 +45,7 @@ EG:
   start: '/htmlAIP/Publications/2021-01-28-AIRAC/html/eAIP/EG-menu-en-GB.html'
   folders:
     - select: '#ADdetails #AD-2details>div.Hx>a[href!="#"]'
-      label: '@id'
+      label: 'a>*:not(.sdParams)'
       format:
         - replace: ['AD-2.', '']
   documents:
@@ -124,7 +124,7 @@ ES:
       label: 'a'
       href:
         child: 'a.sortableFolder--rightArrow'
-        href: '@href'
+        attrib: 'href'
     - select: 'a.folder-link'
       label: 'span:not(.folder-arrow)'
   documents:
@@ -145,6 +145,22 @@ LF:
         - 'basename'
         - split: '-'
         - split: '_'
+LS:
+  label: "LSxx: Switzerland vacc.ch"
+  type: html
+  url: 'https://www.vacc.ch'
+  start: '/en/airports_and_charts/'
+  folders:
+    - select: 'select[name="airports_and_charts"]>option[value!=""]'
+      href: '@value'
+      context: '/en/airports_and_charts/'
+  documents:
+    - select: 'legend#charts~table tr:has(a)'
+      label: 'td:nth-child(2),td:nth-child(3)'
+      href:
+        child: 'a'
+        attrib: 'href'
+      context: '!/en/airports_and_charts/'
 # # Following doesn't work, because Germany decided to publish their charts as
 # # PNG images embedded in HTML documents, encoded in `data:` URLs.
 # ED:

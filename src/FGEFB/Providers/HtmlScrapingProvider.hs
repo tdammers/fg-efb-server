@@ -119,8 +119,28 @@ data LinkSpec =
     , linkLabelExtraction :: Extraction
     , linkLabelFormat :: LabelFormat
     , linkAutoFollow :: Bool
+    , linkContext :: Maybe ContextPattern
     }
     deriving (Show)
+
+type ContextPattern = Text
+
+matchLinkContext :: URL -> LinkSpec -> Bool
+matchLinkContext url spec =
+  case linkContext spec of
+    Nothing -> True
+    Just pattern -> matchPatternContext url pattern
+
+matchPatternContext :: URL -> Text -> Bool
+matchPatternContext url' pattern =
+  trace ("url: " ++ show (renderURL url)) $
+  trace ("pattern: " ++ show pattern) $
+  case Text.take 1 pattern of
+    "^" -> Text.drop 1 pattern `Text.isSuffixOf` renderURL url
+    "!" -> not . matchPatternContext url $ Text.drop 1 pattern
+    _ -> renderURL url == pattern
+    where
+      url = makeHostRelative url'
 
 instance JSON.FromJSON LinkSpec where
   parseJSON j = JSON.withObject "LinkSpec" goObj j
@@ -132,6 +152,7 @@ instance JSON.FromJSON LinkSpec where
           <*> obj .:? "label" .!= (Extraction Nothing ExtractText)
           <*> obj .:? "format" .!= LabelIdentity
           <*> obj .:? "auto-follow" .!= False
+          <*> obj .:? "context"
 
 extractLinks :: LinkSpec -> XML.Cursor -> [(Text, URL, Bool)]
 extractLinks spec root = do
@@ -168,7 +189,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
                   folderLinks =
                     concatMap
                       (\folderSpec -> extractLinks folderSpec root)
-                      folderSpecs
+                      (filter (matchLinkContext currentURL) folderSpecs)
                   autofollowLinks = [ url | (_, url, True) <- folderLinks ]
               case autofollowLinks of
                 [] -> do
@@ -178,7 +199,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
                           map
                             (makeLink False currentURL)
                             (extractLinks documentSpec root))
-                          documentSpecs
+                          (filter (matchLinkContext currentURL) documentSpecs)
                   return $ folderInfos ++ documentInfos
                 linkUrl:_ -> do
                   let url = (currentURL <> linkUrl)
@@ -213,11 +234,13 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
           -- relative URLs resolved against current URL, and then made
           -- hostname-relative
           url :: URL
-          url = (currentURL <> linkUrl)
-                  { urlHostName = Nothing, urlProtocol = Nothing }
+          url = makeHostRelative (currentURL <> linkUrl)
 
           path :: Text
           path = withString urlEncode $ renderURL url
+
+makeHostRelative :: URL -> URL
+makeHostRelative url = url { urlHostName = Nothing, urlProtocol = Nothing }
 
 fetchListing :: Text -> IO (Text, XML.Document)
 fetchListing url = do
