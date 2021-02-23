@@ -37,8 +37,9 @@ import qualified Data.Map as Map
 
 import FGEFB.Provider
 import FGEFB.LoadPDF
-import FGEFB.URL (renderURL, parseURL, URL (..))
+import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
 import FGEFB.Util
+import FGEFB.Regex
 
 data Extraction =
   Extraction
@@ -84,6 +85,7 @@ data LabelFormat
   = LabelIdentity
   | LabelBasename
   | LabelReplace Text Text
+  | LabelRegexReplace Text Text
   | LabelSplitHumps
   | LabelSplitOn Text
   | LabelFormatList [LabelFormat]
@@ -101,6 +103,8 @@ instance JSON.FromJSON LabelFormat where
     flip (JSON.withObject "LabelFormat") j $ \obj -> do
       mreplace <- fmap (\(needle, haystack) -> LabelReplace needle haystack) <$>
                     obj .:? "replace"
+      mregex <- fmap (\(needle, haystack) -> LabelRegexReplace needle haystack) <$>
+                    obj .:? "regex"
       msplit <- fmap LabelSplitOn <$> obj .:? "split"
       return . LabelFormatList . catMaybes $ [mreplace, msplit]
 
@@ -108,9 +112,11 @@ formatLabel :: LabelFormat -> Text -> Text
 formatLabel LabelIdentity = id
 formatLabel LabelBasename = Text.pack . takeBaseName . Text.unpack
 formatLabel LabelSplitHumps = Text.pack . Casing.toWords . Casing.fromHumps . Text.unpack
-formatLabel (LabelReplace needle haystack) = Text.replace needle haystack
+formatLabel (LabelReplace needle replacement) = Text.replace needle replacement
 formatLabel (LabelSplitOn sep) = Text.unwords . Text.splitOn sep
 formatLabel (LabelFormatList items) = \src -> foldl' (flip formatLabel) src items
+formatLabel (LabelRegexReplace re replacement) =
+  reReplace re replacement
 
 data LinkSpec =
   LinkSpec
@@ -180,7 +186,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
         let go :: Text -> IO [FileInfo]
             go path = do
               let actualPath = if Text.null path then landingPath else path
-                  actualURL = either error id . parseURL $ actualPath
+                  actualURL = normalizeURL . either error id . parseURL $ actualPath
               (parentPath, document) <- fetchListing (renderURL $ rootURL <> actualURL)
               let currentURL = either error id $ parseURL parentPath
               let root = XML.fromDocument document
@@ -274,7 +280,8 @@ fetchListing url = do
           error "Infinite redirection"
         else
           fetchListing url'
-      [] ->
+      [] -> do
+        print url
         return $ (url, document)
   where
     redirectCodes = [301, 302, 303, 307, 308]

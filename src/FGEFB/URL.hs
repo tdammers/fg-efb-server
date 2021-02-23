@@ -131,3 +131,12 @@ parseQueryItem :: Text -> (Text, Maybe Text)
 parseQueryItem str =
   let (key, rem) = Text.breakOn "=" str
   in (key, if Text.null rem then Nothing else Just (Text.drop 1 rem))
+
+normalizeURL :: URL -> URL
+normalizeURL url = url { urlPath = normalizePath (urlPath url) }
+
+normalizePath :: Path -> Path
+normalizePath [] = []
+normalizePath (".":xs) = normalizePath xs
+normalizePath (x:"..":xs) = normalizePath xs
+normalizePath (x:xs) = x : normalizePath xs

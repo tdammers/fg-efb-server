@@ -38,6 +38,21 @@ BI:
         - 'basename'
         - split: '-'
         - split: '_'
+EB:
+  label: "EBxx: Belgium & Luxembourg (skeyes.be)"
+  type: html
+  url: 'https://ops.skeyes.be'
+  start: '/html/belgocontrol_static/eaip/eAIP_Main/html/eAIP/EB-menu-en-GB.html'
+  folders:
+    - select: 'a[id^="AD-2."]:not([id$="plus"])'
+  documents:
+    - select: 'div[id$="-AD-2.24"] tr:not(:has(a))'
+      label: 'td'
+      href:
+        child: '+tr td a'
+        attrib: 'href'
+      format:
+        - replace: ['AD 2.', '']
 EG:
   label: "EGxx: United Kingdom NATS"
   type: html
@@ -145,8 +160,29 @@ LF:
         - 'basename'
         - split: '-'
         - split: '_'
+LO:
+  label: "LOxx: Austria (austrocontrol)"
+  type: html
+  url: 'https://eaip.austrocontrol.at'
+  start: '/'
+  folders:
+    - select: 'TR.current A'
+      auto-follow: true
+    - select: '#menu LI:not(:first-child) A'
+      context: '^index.htm'
+    - select: '.center-column-holder TR:has(A[target!="_blank"])'
+      label: 'I,A'
+      href:
+        child: 'A[target!="_blank"]'
+        attrib: 'href'
+  documents:
+    - select: '.center-column-holder TR:has(A[href$=".pdf"])'
+      label: 'I,A'
+      href:
+        child: 'A[href$=".pdf"]'
+        attrib: 'href'
 LS:
-  label: "LSxx: Switzerland vacc.ch"
+  label: "LSxx: Switzerland (vacc.ch)"
   type: html
   url: 'https://www.vacc.ch'
   start: '/en/airports_and_charts/'
