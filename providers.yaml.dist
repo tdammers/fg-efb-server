@@ -161,14 +161,18 @@ LS:
         child: 'a'
         attrib: 'href'
       context: '!/en/airports_and_charts/'
-# # Following doesn't work, because Germany decided to publish their charts as
-# # PNG images embedded in HTML documents, encoded in `data:` URLs.
-# ED:
-#   label: "EDxx: Germany Luftfahrthandbuch"
-#   type: html
-#   url: 'https://aip.dfs.de'
-#   start: '/basicIFR/'
-#   folder-elems: 'a.folder-link'
-#   folder-elem-url-attrib: 'href'
-#   folder-elem-label: 'span.folder-prefix'
-#   document-elems: 'a.does-not-exist'
+# Following doesn't work, because Germany decided to publish their charts as
+# PNG images embedded in HTML documents, encoded in `data:` URLs.
+ED:
+  label: "EDxx: Germany Luftfahrthandbuch"
+  type: html
+  url: 'https://aip.dfs.de'
+  start: '/basicIFR/'
+  folders:
+    - select: 'a.folder-link'
+      label: '.folder-prefix,.folder-name'
+    - select: 'a.document-link'
+      label: '.document-prefix,.document-name'
+  documents:
+    - select: 'a[title="PDF Laden ..."]'
+      label: '@title'
