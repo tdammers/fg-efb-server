@@ -21,14 +21,14 @@ import qualified Text.XML.Cursor as XML
 import qualified Text.XML.Selectors as XML
 import qualified Text.XML.Selectors.Parsers.JQ as XML
 import qualified Text.XML as XML
-import Data.Maybe (catMaybes, listToMaybe, maybeToList)
+import Data.Maybe (catMaybes, listToMaybe, maybeToList, fromMaybe)
 import Network.HTTP.Base (urlEncode, urlDecode)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Text.Encoding (decodeUtf8)
 import Text.Printf (printf)
 import qualified Data.Aeson as JSON
 import Data.Aeson ( (.:), (.:?), (.!=) )
-import Debug.Trace (trace, traceShow)
+import Debug.Trace (trace, traceShow, traceM, traceShowM)
 import qualified Data.Vector as Vector
 import Data.List (foldl')
 import Text.Casing as Casing
@@ -41,12 +41,14 @@ import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
 import FGEFB.Util
 import FGEFB.Regex
 
-data Extraction =
+data ExtractionOf t =
   Extraction
-    { extractionSelector :: Maybe Text
+    { extractionSelector :: Maybe t
     , extractionTarget :: ExtractionTarget
     }
-    deriving (Show)
+    deriving (Show, Functor)
+
+type Extraction = ExtractionOf Text
 
 data ExtractionTarget
   = ExtractText
@@ -106,7 +108,7 @@ instance JSON.FromJSON LabelFormat where
       mregex <- fmap (\(needle, haystack) -> LabelRegexReplace needle haystack) <$>
                     obj .:? "regex"
       msplit <- fmap LabelSplitOn <$> obj .:? "split"
-      return . LabelFormatList . catMaybes $ [mreplace, msplit]
+      return . LabelFormatList . catMaybes $ [mregex, mreplace, msplit]
 
 formatLabel :: LabelFormat -> Text -> Text
 formatLabel LabelIdentity = id
@@ -122,6 +124,7 @@ data LinkSpec =
   LinkSpec
     { elemSelector :: Text
     , linkHrefExtraction :: Extraction
+    , linkHrefFormat :: LabelFormat
     , linkLabelExtraction :: Extraction
     , linkLabelFormat :: LabelFormat
     , linkAutoFollow :: Bool
@@ -138,13 +141,17 @@ matchLinkContext url spec =
     Just pattern -> matchPatternContext url pattern
 
 matchPatternContext :: URL -> Text -> Bool
-matchPatternContext url' pattern =
+matchPatternContext url' pattern' =
   case Text.take 1 pattern of
     "^" -> Text.drop 1 pattern `Text.isSuffixOf` renderURL url
     "!" -> not . matchPatternContext url $ Text.drop 1 pattern
     _ -> renderURL url == pattern
     where
       url = makeHostRelative url'
+      pattern = Text.replace
+                  "{anchor}"
+                  (fromMaybe "" $ urlAnchor url)
+                  pattern'
 
 instance JSON.FromJSON LinkSpec where
   parseJSON j = JSON.withObject "LinkSpec" goObj j
@@ -153,20 +160,26 @@ instance JSON.FromJSON LinkSpec where
         LinkSpec
           <$> obj .: "select"
           <*> obj .:? "href" .!= (Extraction Nothing (ExtractAttribute "href"))
+          <*> obj .:? "href-format" .!= LabelIdentity
           <*> obj .:? "label" .!= (Extraction Nothing ExtractText)
           <*> obj .:? "format" .!= LabelIdentity
           <*> obj .:? "auto-follow" .!= False
           <*> obj .:? "context"
 
-extractLinks :: LinkSpec -> XML.Cursor -> [(Text, URL, Bool)]
-extractLinks spec root = do
-  sel <- Text.strip <$> Text.splitOn "," (elemSelector spec)
+extractLinks :: URL -> LinkSpec -> XML.Cursor -> [(Text, URL, Bool)]
+extractLinks currentURL spec root = do
+  traceShowM (replaceVars $ elemSelector spec)
+  sel <- Text.strip <$> Text.splitOn "," (replaceVars $ elemSelector spec)
   elem <- jqQuery sel root
-  let labelRaw = Text.unwords $ extract (linkLabelExtraction spec) elem
+  let labelRaw = Text.unwords $ extract (replaceVars <$> linkLabelExtraction spec) elem
   let label = formatLabel (linkLabelFormat spec) labelRaw
-  href <- extract (linkHrefExtraction spec) elem
+  hrefRaw <- extract (replaceVars <$> linkHrefExtraction spec) elem
+  let href = formatLabel (linkHrefFormat spec) hrefRaw
   url <- either (const []) return $ parseURL href
   return (label, url, linkAutoFollow spec)
+  where
+    replaceVars =
+      Text.replace "{anchor}" $ fromMaybe "" (urlAnchor currentURL)
 
 htmlScrapingProvider :: ProviderContext
                      -> Maybe Text
@@ -192,7 +205,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
               let root = XML.fromDocument document
                   folderLinks =
                     concatMap
-                      (\folderSpec -> extractLinks folderSpec root)
+                      (\folderSpec -> extractLinks currentURL folderSpec root)
                       (filter (matchLinkContext currentURL) folderSpecs)
                   autofollowLinks = [ url | (_, url, True) <- folderLinks ]
               case autofollowLinks of
@@ -202,7 +215,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
                         concatMap (\documentSpec ->
                           map
                             (makeLink False currentURL)
-                            (extractLinks documentSpec root))
+                            (extractLinks currentURL documentSpec root))
                           (filter (matchLinkContext currentURL) documentSpecs)
                   return $ folderInfos ++ documentInfos
                 linkUrl:_ -> do
@@ -258,12 +271,13 @@ fetchListing url = do
       Nothing ->
         error "Missing location header"
       Just location -> do
+        printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
         let url' = renderURL $
                     either error id (parseURL url) <>
                     either error id (parseURL (decodeUtf8 location))
         if url' == url then
           error "Infinite redirection"
-        else
+        else do
           fetchListing url'
   else do
     let document = HTML.parseLBS . HTTP.getResponseBody $ rp
@@ -275,7 +289,8 @@ fetchListing url = do
           XML.fromDocument $
           document
     case metaRefresh of
-      url':_ ->
+      url':_ -> do
+        printf "Redirecting due to meta refresh: %s\n" url'
         if url' == url then
           error "Infinite redirection"
         else

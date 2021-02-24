@@ -5,6 +5,7 @@ where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.String (IsString (..))
+import Debug.Trace
 
 data Protocol
   = HTTP
@@ -22,6 +23,7 @@ data URL =
     , urlHostName :: Maybe HostName
     , urlPath :: Path
     , urlQuery :: Maybe Query
+    , urlAnchor :: Maybe Text
     }
     deriving (Show, Eq)
 
@@ -43,6 +45,9 @@ renderURL url = mconcat
   , case urlQuery url of
       Nothing -> ""
       Just query -> "?" <> renderQuery query
+  , case urlAnchor url of
+      Nothing -> ""
+      Just anchor -> "#" <> anchor
   ]
 
 renderProtocol :: Protocol -> Text
@@ -65,6 +70,7 @@ appendURL a b
   | otherwise
   = a { urlPath = appendPath (urlPath a) (urlPath b)
       , urlQuery = urlQuery b
+      , urlAnchor = urlAnchor b
       }
 
 appendPath :: Path -> Path -> Path
@@ -112,14 +118,20 @@ parseProtocolRelativeURL str
 
 parseHostRelativeURL :: Text -> Either String URL
 parseHostRelativeURL str = do
-  let (pathStr, queryStr) = Text.breakOn "?" str
+  let (pathStr, queryAnchorStr) = Text.break (`elem` ("#?" :: [Char])) str
       path = Text.splitOn "/" pathStr
+      (queryStr, anchorStr) = Text.breakOn "#" queryAnchorStr
       query = parseQuery $ Text.drop 1 queryStr
+      anchor = if Text.null anchorStr then
+                  Nothing
+               else
+                Just (Text.drop 1 anchorStr)
   return URL
           { urlProtocol = Nothing
           , urlHostName = Nothing
           , urlPath = path
           , urlQuery = if Text.null queryStr then Nothing else Just query
+          , urlAnchor = anchor
           }
 
 parseQuery :: Text -> Query
