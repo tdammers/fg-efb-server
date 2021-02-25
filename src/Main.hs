@@ -1,6 +1,7 @@
 {-#LANGUAGE OverloadedStrings #-}
 {-#LANGUAGE OverloadedLists #-}
 {-#LANGUAGE LambdaCase #-}
+{-#LANGUAGE TemplateHaskell #-}
 module Main
 where
 
@@ -31,6 +32,7 @@ import qualified Data.Cache as Cache
 import Data.Hashable (Hashable)
 import System.Directory (doesFileExist, XdgDirectory (..), getXdgDirectory, getAppUserDataDirectory)
 import Data.Bool (bool)
+import Data.FileEmbed
 
 import FGEFB.Provider
 import FGEFB.Providers
@@ -57,11 +59,11 @@ app listingCache provider = do
 
   Scotty.get "/static/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
-    Scotty.file "./static/style.css"
+    Scotty.raw $ LBS.fromStrict $(embedFile "./static/style.css")
 
   Scotty.get "/static/style.xsl" $ do
-    Scotty.setHeader "Content-Type" "text/css"
-    Scotty.file "./static/style.xsl"
+    Scotty.setHeader "Content-Type" "text/xsl"
+    Scotty.raw $ LBS.fromStrict $(embedFile "./static/style.xsl")
 
   -- directory listings
   Scotty.get (Scotty.function captureListing) $ do
