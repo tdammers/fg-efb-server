@@ -8,14 +8,19 @@ on:
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        ghc: ['8.8.4']
 
-    runs-on: ubuntu-latest
+    runs-on: ${{matrix.os}}
 
     steps:
     - uses: actions/checkout@v2
     - uses: actions/setup-haskell@v1
       with:
-        ghc-version: '8.10.3'
+        ghc-version: ${{ matrix.ghc }}
         cabal-version: '3.2'
 
     - name: Cache
@@ -39,4 +44,12 @@ jobs:
     - name: Run tests
       run: cabal test all
     - name: Install
-      run: cabal install
+      run: |
+        mkdir -p ${{ github.workspace }}/dist
+        cp *.yaml.dist ${{ github.workspace }}/dist/
+        cabal install --install-method=copy --installdir=${{ github.workspace }}/dist
+    - name: Upload
+      uses: actions/upload-artifact@v2
+      with:
+        name: fg-efb-server ${{ runner.os }}
+        path: ${{ github.workspace }}/dist/*
