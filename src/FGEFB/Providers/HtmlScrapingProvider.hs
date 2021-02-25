@@ -2,6 +2,7 @@
 {-#LANGUAGE FlexibleInstances #-}
 {-#LANGUAGE OverloadedStrings #-}
 {-#LANGUAGE ScopedTypeVariables #-}
+{-#LANGUAGE LambdaCase #-}
 module FGEFB.Providers.HtmlScrapingProvider
 where
 
@@ -31,7 +32,7 @@ import qualified Data.Aeson as JSON
 import Data.Aeson ( (.:), (.:?), (.!=) )
 import Debug.Trace (trace, traceShow, traceM, traceShowM)
 import qualified Data.Vector as Vector
-import Data.List (foldl')
+import Data.List (foldl', sortOn)
 import Text.Casing as Casing
 import Data.Time
 import qualified Data.Map as Map
@@ -130,8 +131,22 @@ data LinkSpec =
     , linkLabelFormat :: LabelFormat
     , linkAutoFollow :: Bool
     , linkContext :: Maybe ContextPattern
+    , linkFilter :: Maybe Text
+    , linkSort :: LinkSort
     }
     deriving (Show)
+
+data LinkSort
+  = SortLinkNone
+  | SortLinkByLabel
+  deriving (Show)
+
+instance JSON.FromJSON LinkSort where
+  parseJSON (JSON.String "none") = return SortLinkNone
+  parseJSON (JSON.String "label") = return SortLinkByLabel
+  parseJSON (JSON.Bool True) = return SortLinkByLabel
+  parseJSON (JSON.Bool False) = return SortLinkNone
+  parseJSON _ = fail "Invalid sorting"
 
 type ContextPattern = Text
 
@@ -166,20 +181,34 @@ instance JSON.FromJSON LinkSpec where
           <*> obj .:? "format" .!= LabelIdentity
           <*> obj .:? "auto-follow" .!= False
           <*> obj .:? "context"
+          <*> obj .:? "filter"
+          <*> obj .:? "sort" .!= SortLinkNone
 
 extractLinks :: URL -> LinkSpec -> XML.Cursor -> [(Text, URL, Bool)]
-extractLinks currentURL spec root = do
+extractLinks currentURL spec root = applySorting $ do
   sel <- Text.strip <$> Text.splitOn "," (replaceVars $ elemSelector spec)
   elem <- jqQuery sel root
   let labelRaw = Text.unwords $ extract (replaceVars <$> linkLabelExtraction spec) elem
   let label = formatLabel (linkLabelFormat spec) labelRaw
-  hrefRaw <- extract (replaceVars <$> linkHrefExtraction spec) elem
-  let href = formatLabel (linkHrefFormat spec) hrefRaw
-  url <- either (const []) return $ parseURL href
-  return (label, url, linkAutoFollow spec)
+
+  let keep = case linkFilter spec of
+                Nothing -> True
+                Just re -> reTest re label
+  if keep then do
+    hrefRaw <- extract (replaceVars <$> linkHrefExtraction spec) elem
+    let href = formatLabel (linkHrefFormat spec) hrefRaw
+    url <- either (const []) return $ parseURL href
+    return (label, url, linkAutoFollow spec)
+  else do
+    []
   where
     replaceVars =
       Text.replace "{anchor}" $ fromMaybe "" (urlAnchor currentURL)
+    applySorting =
+      case linkSort spec of
+        SortLinkNone -> id
+        SortLinkByLabel -> sortOn (\(label, _, _) -> label)
+        
 
 htmlScrapingProvider :: ProviderContext
                      -> Maybe Text

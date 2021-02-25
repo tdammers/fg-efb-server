@@ -85,4 +85,5 @@ reReplace re replacementSrc haystack =
       = go n xs
 
 reTest :: Text -> Text -> Bool
-reTest re haystack = haystack =~ re
+reTest re haystack =
+  haystack =~ re
