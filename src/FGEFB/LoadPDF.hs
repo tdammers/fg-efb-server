@@ -20,6 +20,7 @@ import Text.Printf (printf)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
 import Data.Bool (bool)
+import Data.Maybe (fromMaybe)
 
 getCacheDir :: IO FilePath
 getCacheDir = do
@@ -78,23 +79,23 @@ loadPdfPage path page = do
 
 convertPdfPage :: FilePath -> Int -> FilePath -> IO Bool
 convertPdfPage path page output = do
+  magick <- fromMaybe "magick" <$> lookupEnv "MAGICK_BINARY"
   printf "CONVERT %s\n" path
+  let args = [ "-background", "white"
+             , "-density"
+             , "300"
+             , path ++ "[" ++ show page ++ "]"
+             , "-colorspace", "RGB"
+             , "-depth", "24"
+             , "-quality", "90"
+             , "-thumbnail", "4096x4096"
+             , "-gravity", "center"
+             , "-extent", "4096x4096"
+             , output
+             ]
+  putStrLn $ Process.showCommandForUser magick args
   (exitCode, out, err) <-
-      Process.readProcessWithExitCode "convert"
-          [ "-background", "white"
-          , "-density"
-          , "300"
-          , path ++ "[" ++ show page ++ "]"
-          , "-alpha", "off"
-          , "-colorspace", "RGB"
-          , "-depth", "24"
-          , "-quality", "90"
-          , "-thumbnail", "4096x4096"
-          , "-gravity", "center"
-          , "-extent", "4096x4096"
-          , output
-          ]
-          ""
+      Process.readProcessWithExitCode magick args ""
   case exitCode of
     ExitSuccess -> do
       return True

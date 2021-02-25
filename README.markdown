@@ -24,7 +24,10 @@ https://github.com/tdammers/E-jet-family-YV/blob/wip/efb/Documentation/EFB.markd
 
 ## Runtime Dependencies
 
-- `ImageMagick`
+- `ImageMagick` - ideally, install version 7.0 or newer from
+  [here](https://imagemagick.org/script/download.php); version 6.0 (which some
+  Linux distros still ship) will likely work too, but may require some
+  additional hoop-jumping (see below).
 - `GhostScript` (ImageMagick uses this to convert PDF to PNG)
 
 ## Usage
@@ -35,6 +38,28 @@ Start the program with:
 
 This will start a web server; keep it running, and launch a suitable version of
 the FlightGear E-Jet (one that has the EFB on board).
+
+### Persisting Cached Files Across Runs
+
+By default, `fg-efb-server` will create a temporary directory to cache
+downloaded files, and deletes it when shutting down. If you want to retain
+downloaded files, set the environment variable `PDFCACHE` to a directory of
+your choice (which must exist when `fg-efb-server` starts up). Example:
+
+    PDFCACHE=./cache fg-efb-server
+
+Note that this will only cache PDF files and rendered JPG files; listings are
+cached in-memory, and there is not currently a way of persisting them across
+runs.
+
+### Using legacy (6.x) ImageMagick
+
+Before version 7.0, ImageMagick would ship as individual binaries by command,
+and the conversion command we use is called `convert`, rather than `magick` as
+with version 7.0 and up. If you want to use `convert`, you need to set the
+environment variable `MAGICK_BINARY`, e.g.:
+
+    MAGICK_BINARY=convert fg-efb-server
 
 ## Data Sources Configuration
 
@@ -52,6 +77,10 @@ PDF files in the current directory.
 Some providers will interpolate variables into some of their configuration
 values; these variables can be defined in `defs.yaml`, in the same directory as
 the `providers.yaml` file.
+
+If you are unsure where to put these files, watch the console output from
+`fg-efb-server`: if the files cannot be found, it will print a list of
+locations searched.
 
 ### Provider Spec Keys (all providers)
 
