@@ -192,7 +192,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
   Provider
     { label = mlabel
     , getPdfPage = \filenameEnc page -> do
-        let filename = urlDecode . dropExtension . Text.unpack $ filenameEnc
+        let filename = urlDecode . Text.unpack $ filenameEnc
             localURL = either error id . parseURL . Text.pack $ filename
         loadPdfPageHttp (renderURL $ rootURL <> localURL) page
     , listFiles = \pathEnc -> do
@@ -244,7 +244,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
       makeLink isDir currentURL (label, linkUrl, _) =
         FileInfo
            { fileName = Text.unwords . Text.words $ label
-           , filePath = if isDir then path else (withString (<.> ".pdf")) path
+           , filePath = path
            , fileType = if isDir then Directory else PDFFile
            }
         where
