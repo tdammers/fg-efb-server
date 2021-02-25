@@ -81,7 +81,9 @@ convertPdfPage :: FilePath -> Int -> FilePath -> IO Bool
 convertPdfPage path page output = do
   magick <- fromMaybe "magick" <$> lookupEnv "MAGICK_BINARY"
   printf "CONVERT %s\n" path
-  let args = [ "-background", "white"
+  let args = [ "-limit", "area", "512MiB"
+             , "-limit", "disk", "2GiB"
+             , "-background", "white"
              , "-density"
              , "300"
              , path ++ "[" ++ show page ++ "]"
