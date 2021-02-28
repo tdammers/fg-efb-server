@@ -7,6 +7,7 @@ where
 
 import qualified Web.Scotty as Scotty
 import Web.Scotty (ScottyM, scotty)
+import qualified Network.HTTP.Types as HTTP
 import Network.Wai as Wai
 import Control.Monad (forM_)
 import qualified Text.XML as XML
@@ -51,19 +52,36 @@ capturePDF rq =
     "files":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ -> Nothing
 
+errorPNG :: Scotty.ActionM ()
+errorPNG = do
+  Scotty.setHeader "Content-Type" "image/png"
+  Scotty.raw $ LBS.fromStrict $(embedFile "./static/error.png")
+
+notfoundPNG :: Scotty.ActionM ()
+notfoundPNG = do
+  Scotty.setHeader "Content-Type" "image/png"
+  Scotty.raw $ LBS.fromStrict $(embedFile "./static/notfound.png")
+
+styleXSL :: Scotty.ActionM ()
+styleXSL = do
+  Scotty.setHeader "Content-Type" "text/xsl"
+  Scotty.raw $ LBS.fromStrict $(embedFile "./static/style.xsl")
+
+styleCSS :: Scotty.ActionM ()
+styleCSS = do
+  Scotty.setHeader "Content-Type" "text/css"
+  Scotty.raw $ LBS.fromStrict $(embedFile "./static/style.css")
+
 app :: Cache Text [FileInfo] -> Provider -> ScottyM ()
 app listingCache provider = do
   Scotty.get "/" $ do
     Scotty.headers >>= Scotty.liftAndCatchIO . print
     Scotty.redirect "/api"
 
-  Scotty.get "/static/style.css" $ do
-    Scotty.setHeader "Content-Type" "text/css"
-    Scotty.raw $ LBS.fromStrict $(embedFile "./static/style.css")
-
-  Scotty.get "/static/style.xsl" $ do
-    Scotty.setHeader "Content-Type" "text/xsl"
-    Scotty.raw $ LBS.fromStrict $(embedFile "./static/style.xsl")
+  Scotty.get "/static/style.css" styleCSS
+  Scotty.get "/static/style.xsl" styleXSL
+  Scotty.get "/static/error.png" $ errorPNG
+  Scotty.get "/static/notfound.png" $ notfoundPNG
 
   -- directory listings
   Scotty.get (Scotty.function captureListing) $ do
@@ -80,16 +98,12 @@ app listingCache provider = do
     page <- Scotty.param "p" `Scotty.rescue` const (return 0)
     mbody <- Scotty.liftAndCatchIO $ getPdfPage provider filename page
     case mbody of
-      Nothing ->
-        Scotty.next
+      Nothing -> do
+        Scotty.status HTTP.notFound404
+        notfoundPNG
       Just body -> do
         Scotty.setHeader "Content-type" "image/jpeg"
         Scotty.raw body
-
-  Scotty.get (Scotty.regex "^.*$") $ do
-    -- path <- Scotty.param "0"
-    -- Scotty.liftAndCatchIO $ putStrLn path
-    Scotty.next
 
   where
     cached :: (Eq k, Hashable k) => Cache k v -> k -> IO v -> IO v
