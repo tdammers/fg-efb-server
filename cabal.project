@@ -2,4 +2,4 @@ packages: .
 source-repository-package
     type: git
     location: https://github.com/tdammers/xml-conduit-selectors
-    tag: d8fdd74e137e0ebcfdcc6f20fb5987d88b2d4db6
+    tag: cedc2f3975b66f8ecab4ad70d45e1a140a82fefb
