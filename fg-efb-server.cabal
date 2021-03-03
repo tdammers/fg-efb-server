@@ -17,6 +17,8 @@ copyright: Tobias Dammers 2021
 build-type: Simple
 extra-source-files: static/style.css
                   , static/style.xsl
+                  , static/error.png
+                  , static/notfound.png
 
 executable fg-efb-server
   main-is: Main.hs
