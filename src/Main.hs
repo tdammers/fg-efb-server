@@ -27,6 +27,7 @@ import System.FilePath ( takeExtension, takeBaseName, (</>) )
 import System.IO.Temp (withSystemTempDirectory)
 import qualified Data.Yaml as YAML
 import qualified Data.Aeson as JSON
+import Data.Aeson ( (.=) )
 import Data.Maybe (fromMaybe, catMaybes, listToMaybe)
 import Data.Cache (Cache, newCache)
 import qualified Data.Cache as Cache
@@ -34,21 +35,24 @@ import Data.Hashable (Hashable)
 import System.Directory (doesFileExist, XdgDirectory (..), getXdgDirectory, getAppUserDataDirectory)
 import Data.Bool (bool)
 import Data.FileEmbed
+import Data.Time (UTCTime (..), Day, getCurrentTime)
 
 import FGEFB.Provider
 import FGEFB.Providers
 import FGEFB.Providers.GroupProvider
 import FGEFB.Providers.LocalFileProvider
+import FGEFB.Airac (Airac, findCurrentAiracOn, airacDetails)
+import qualified FGEFB.Airac as Airac
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
-  case (filter (not . Text.null) (Wai.pathInfo rq)) of
+  case filter (not . Text.null) (Wai.pathInfo rq) of
     "api":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ -> Nothing
 
 capturePDF :: Wai.Request -> Maybe [Scotty.Param]
 capturePDF rq =
-  case (filter (not . Text.null) (Wai.pathInfo rq)) of
+  case filter (not . Text.null) (Wai.pathInfo rq) of
     "files":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ -> Nothing
 
@@ -80,8 +84,8 @@ app listingCache provider = do
 
   Scotty.get "/static/style.css" styleCSS
   Scotty.get "/static/style.xsl" styleXSL
-  Scotty.get "/static/error.png" $ errorPNG
-  Scotty.get "/static/notfound.png" $ notfoundPNG
+  Scotty.get "/static/error.png" errorPNG
+  Scotty.get "/static/notfound.png" notfoundPNG
 
   -- directory listings
   Scotty.get (Scotty.function captureListing) $ do
@@ -191,7 +195,7 @@ findConfigFiles :: FilePath -> IO ([FilePath], [FilePath])
 findConfigFiles filename = do
   xdg <- getXdgDirectory XdgConfig "fg-efb-server"
   aud <- getAppUserDataDirectory "fg-efb-server"
-  let candidates = map (</> filename) [xdg, aud]
+  let candidates = map (</> filename) [xdg, aud, "."]
   found <- mapM (\f -> bool Nothing (Just f) <$> doesFileExist f) candidates
   return (candidates, catMaybes found)
 
@@ -222,11 +226,36 @@ defProviders = [
           localFileProvider (Just "default") "."
     )
   ]
-  
 
 runServer :: IO ()
 runServer = do
-  defs <- loadFirstConfigFileOrElse [] "defs.yaml"
+  defs' <- loadFirstConfigFileOrElse [] "defs.yaml"
+  airacs <- loadFirstConfigFileOrElse [] "airac.yaml" :: IO [Airac]
+  today <- utctDay <$> getCurrentTime
+  let airacMay = findCurrentAiracOn today airacs
+  defs <- case airacMay of
+    Nothing -> do
+      putStrLn "Warning: current AIRAC not found"
+      putStrLn "Have:"
+      mapM_ (print . Airac.number) airacs
+      return defs'
+    Just airac -> do
+      return $
+        Map.fromList
+          [ ("airac", JSON.toJSON $ airacDetails airac)
+          ]
+        <> defs'
+  print defs
+
+--  ident: '2105'
+--  date: '2021-03-25'
+--  year: '2021'
+--  month: '3'
+--  month2: '03'
+--  monthNameU3: 'MAR'
+--  day: '25'
+--  day2: '25'
+
   providerFactories <- loadFirstConfigFileOrElse defProviders "providers.yaml"
   let context = defProviderContext { contextDefs = defs }
       providers = fmap (\factory -> makeProvider factory context) providerFactories
