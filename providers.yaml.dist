@@ -1,9 +1,5 @@
-local:
-  label: "Local Disk"
-  type: file
-  path: '/home/myname/charts'
 K.sky:
-  label: "Kxxx: USA (Skyvector)"
+  label: "Kxxx,Pxxx: USA (Skyvector)"
   type: html
   url: 'https://skyvector.com'
   start: '/airports/United+States'
@@ -12,6 +8,8 @@ K.sky:
     - select: 'td.views-field-title>a'
       format:
         - replace: ['&amp;', '&']
+      filter: '^[A-Z][A-Z][A-Z] '
+      sort: label
   documents:
     - select: 'div.aptdata>a:has(img)'
       label:
@@ -65,7 +63,18 @@ EG:
         - replace: ['AD-2.', '']
   documents:
     - select: 'div[id$="2.24"] tr'
-      # label: 'td p'
+      format:
+        - replace: ['STANDARD DEPARTURE CHART - ', '']
+        - replace: ['INSTRUMENT (SID)', 'SID']
+        - replace: [' - ICAO', '']
+        - replace: [' (DME/DME or GNSS)', '']
+        - replace: [' (DME/DME OR GNSS)', '']
+        - replace: ['STANDARD INSTRUMENT DEPARTURE', '']
+        - regex: ['STANDARD ARRIVAL CHART *- INSTRUMENT \(STAR\)', 'STAR']
+        - replace: ['STANDARD ARRIVAL CHART', 'STAR']
+        - replace: ['STANDARD INSTRUMENT ARRIVAL', 'STAR']
+        - replace: ['INSTRUMENT APPROACH CHART', 'IAC']
+        - replace: ['CODING TABLES', 'Coding Tables']
       href:
         child: '+tr a'
         attrib: 'href'
@@ -151,6 +160,9 @@ LF:
   url: 'https://www.sia.aviation-civile.gouv.fr'
   start: '/dvd/eAIP_{airac.day2}_{airac.monthNameU3}_{airac.year}/FRANCE/AIRAC-{airac.year}-{airac.month2}-{airac.day2}/html/eAIP/FR-menu-fr-FR.html'
   folders:
+    # - select: 'nav.navigation li.level0:nth-child(2) a[href!="#"]'
+    #   context: '/'
+    # - select: '#dateVig,#dateVigNext'
     - select: 'div#AD-2-IFRdetails div.H3 a[href!="#"]'
     - select: 'div#AD-2-VFRdetails div.H3 a[href!="#"]'
     - select: 'div#AD-2-MILdetails div.H3 a[href!="#"]'
@@ -177,7 +189,7 @@ LO:
         attrib: 'href'
   documents:
     - select: '.center-column-holder TR:has(A[href$=".pdf"])'
-      label: 'I,A'
+      label: 'I,A[href$=".pdf"]'
       href:
         child: 'A[href$=".pdf"]'
         attrib: 'href'
@@ -197,8 +209,6 @@ LS:
         child: 'a'
         attrib: 'href'
       context: '!/en/airports_and_charts/'
-# Following doesn't work, because Germany decided to publish their charts as
-# PNG images embedded in HTML documents, encoded in `data:` URLs.
 ED:
   label: "EDxx: Germany Luftfahrthandbuch"
   type: html
@@ -207,8 +217,18 @@ ED:
   folders:
     - select: 'a.folder-link'
       label: '.folder-prefix,.folder-name'
+  documents:
     - select: 'a.document-link'
       label: '.document-prefix,.document-name'
-  documents:
-    - select: 'a[title="PDF Laden ..."]'
-      label: '@title'
+      format:
+        - regex: ['^AD 2 [A-Z]{4} [0-9]+(-[0-9]+)+ *', '']
+        - replace: ['Instrument Approach Chart', 'IAC']
+        - replace: ['- Instrument', '']
+        - replace: ['Standard Arrival Chart', 'STAR']
+        - replace: ['Standard Departure Chart', 'SID']
+        - replace: ['Departure Chart', 'SID']
+        - replace: ['Standard Departure Routes', 'SID Routes']
+      filter: '.'
+      href-format:
+        - regex: ['^pages/(.*)\.html$', '/basicIFR/print/AD/$1/AD%20ANYTHING']
+      auto-follow: true
