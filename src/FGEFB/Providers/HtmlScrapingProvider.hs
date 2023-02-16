@@ -2,14 +2,12 @@
 {-#LANGUAGE FlexibleInstances #-}
 {-#LANGUAGE OverloadedStrings #-}
 {-#LANGUAGE ScopedTypeVariables #-}
-{-#LANGUAGE LambdaCase #-}
 module FGEFB.Providers.HtmlScrapingProvider
 where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
-import qualified Data.Aeson as JSON
 import qualified Data.Aeson.TH as JSON
 import Network.HTTP.Simple (httpJSON, httpBS)
 import qualified Network.HTTP.Simple as HTTP

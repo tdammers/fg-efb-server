@@ -14,7 +14,7 @@ import Data.Bool (bool)
 
 import FGEFB.Util (tshow)
 
-data ProviderContext =
+newtype ProviderContext =
   ProviderContext
     { contextDefs :: Map Text JSON.Value
     }
@@ -34,7 +34,8 @@ unpackVar prefix (k, v) = do
     JSON.Number n -> return (pk, tshow n)
     JSON.Null -> return (pk, "")
     JSON.Bool b -> return (pk, bool "no" "yes" b)
-    JSON.Object o -> do
+    JSON.Object {} -> do
+      let JSON.Success o = JSON.fromJSON v
       unpackVarList (pk <> ".") (HashMap.toList o)
 
 defProviderContext :: ProviderContext

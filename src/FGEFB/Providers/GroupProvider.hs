@@ -1,4 +1,3 @@
-{-#LANGUAGE LambdaCase #-}
 {-#LANGUAGE OverloadedStrings #-}
 module FGEFB.Providers.GroupProvider
 where
