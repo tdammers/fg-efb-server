@@ -1,4 +1,4 @@
-{-#LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase #-}
 module FGEFB.Providers.LocalFileProvider
 where
 

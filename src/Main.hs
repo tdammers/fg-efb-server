@@ -1,7 +1,7 @@
-{-#LANGUAGE OverloadedStrings #-}
-{-#LANGUAGE OverloadedLists #-}
-{-#LANGUAGE LambdaCase #-}
-{-#LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Main
 where
 

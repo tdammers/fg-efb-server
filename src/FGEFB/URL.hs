@@ -1,11 +1,10 @@
-{-#LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
 module FGEFB.URL
 where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.String (IsString (..))
-import Debug.Trace
 
 data Protocol
   = HTTP

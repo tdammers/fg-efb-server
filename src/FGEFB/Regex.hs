@@ -1,5 +1,5 @@
-{-#LANGUAGE OverloadedStrings #-}
-{-#LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 module FGEFB.Regex
 where
 

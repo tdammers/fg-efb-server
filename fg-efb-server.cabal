@@ -22,18 +22,23 @@ extra-source-files: static/style.css
 
 executable fg-efb-server
   main-is: Main.hs
-  other-modules: FGEFB.Provider
-               , FGEFB.Providers
-               , FGEFB.Providers.GroupProvider
-               , FGEFB.Providers.LocalFileProvider
-               , FGEFB.Providers.NavaidJsonProvider
-               , FGEFB.Providers.HtmlScrapingProvider
-               , FGEFB.Providers.ScriptedHtmlScrapingProvider
-               , FGEFB.LoadPDF
-               , FGEFB.URL
-               , FGEFB.Util
-               , FGEFB.Regex
-               , FGEFB.Airac
+  -- ghc-options: -Wall -Wunused-imports
+  other-modules:
+    FGEFB.Airac
+    FGEFB.LoadPDF
+    FGEFB.Provider
+    FGEFB.Providers
+    FGEFB.Providers.GroupProvider
+    FGEFB.Providers.HtmlScrapingProvider
+    FGEFB.Providers.LocalFileProvider
+    FGEFB.Providers.NavaidJsonProvider
+    FGEFB.Providers.ScriptedHtmlScrapingProvider
+    FGEFB.Providers.ScriptedHtmlScrapingProvider.AST
+    FGEFB.Providers.ScriptedHtmlScrapingProvider.Interpreter
+    FGEFB.Regex
+    FGEFB.URL
+    FGEFB.Util
+    FGEFB.XmlUtil
   -- other-extensions:
   build-depends: base >=4.12 && <5
                , aeson >=1.5.5.1 && <2.2.0.0

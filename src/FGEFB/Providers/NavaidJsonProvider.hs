@@ -1,5 +1,5 @@
-{-#LANGUAGE TemplateHaskell #-}
-{-#LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 module FGEFB.Providers.NavaidJsonProvider
 where
 

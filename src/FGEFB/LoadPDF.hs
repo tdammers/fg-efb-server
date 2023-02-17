@@ -1,6 +1,6 @@
-{-#LANGUAGE TypeApplications #-}
-{-#LANGUAGE LambdaCase #-}
-{-#LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 module FGEFB.LoadPDF
 where
 

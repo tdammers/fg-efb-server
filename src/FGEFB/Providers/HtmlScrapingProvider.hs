@@ -1,7 +1,7 @@
-{-#LANGUAGE DeriveFunctor #-}
-{-#LANGUAGE FlexibleInstances #-}
-{-#LANGUAGE OverloadedStrings #-}
-{-#LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module FGEFB.Providers.HtmlScrapingProvider
 where
 
@@ -40,6 +40,7 @@ import FGEFB.Provider
 import FGEFB.Regex
 import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
 import FGEFB.Util
+import FGEFB.XmlUtil
 
 data ExtractionOf t =
   Extraction
@@ -352,25 +353,3 @@ combineURLs current new =
     currentURL <- parseURL current
     newURL <- parseURL new
     return $ renderURL (currentURL <> newURL)
-
-uqName :: Text -> XML.Name
-uqName t = XML.Name t Nothing Nothing
-
-interpolateVars :: [(Text, Text)] -> Text -> Text
-interpolateVars vars template =
-  foldl' (flip interpolateVar) template vars
-
-interpolateVar :: (Text, Text) -> Text -> Text
-interpolateVar (k, v) =
-  Text.replace ("{" <> k <> "}") v
-
-jqQuery :: Text -> XML.Cursor -> [XML.Cursor]
-jqQuery q = XML.match $ XML.jqText' q
-
-jqQuery1 :: Text -> XML.Cursor -> Maybe XML.Cursor
-jqQuery1 q = listToMaybe . jqQuery q
-
-textContent :: XML.Node -> Text
-textContent (XML.NodeContent t) = t
-textContent (XML.NodeElement (XML.Element _ _ children)) = mconcat . map textContent $ children
-textContent _ = ""
