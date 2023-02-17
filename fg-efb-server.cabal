@@ -28,6 +28,7 @@ executable fg-efb-server
                , FGEFB.Providers.LocalFileProvider
                , FGEFB.Providers.NavaidJsonProvider
                , FGEFB.Providers.HtmlScrapingProvider
+               , FGEFB.Providers.ScriptedHtmlScrapingProvider
                , FGEFB.LoadPDF
                , FGEFB.URL
                , FGEFB.Util

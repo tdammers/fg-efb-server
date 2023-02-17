@@ -30,8 +30,11 @@ $(deriveJSON defaultOptions 'Airac)
 data AiracDetails =
   AiracDetails
     { ident :: Text
+    , nominalYear :: Text
+    , period :: Text
     , date :: Text
     , year :: Text
+    , year2 :: Text
     , month :: Text
     , month2 :: Text
     , monthNameU3 :: Text
@@ -55,8 +58,11 @@ airacDetails :: Airac -> AiracDetails
 airacDetails a =
   AiracDetails
     { ident = number a
+    , nominalYear = Text.take 2 $ number a
+    , period = Text.drop 2 $ number a
     , date = tfmt "%Y-%m-%d" (valid a)
     , year = tfmt "%Y" (valid a)
+    , year2 = Text.drop 2 $ tfmt "%Y" (valid a)
     , month = Text.dropWhile (== '0') $ tfmt "%m" (valid a)
     , month2 = tfmt "%m" (valid a)
     , monthNameU3 = Text.toUpper $ tfmt "%b" (valid a)

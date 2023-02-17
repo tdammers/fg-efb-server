@@ -5,41 +5,41 @@
 module FGEFB.Providers.HtmlScrapingProvider
 where
 
+import Control.Monad (when, forM)
+import Data.Aeson ( (.:), (.:?), (.!=) )
+import qualified Data.Aeson as JSON
+import qualified Data.Aeson.TH as JSON
+import qualified Data.ByteString.Lazy as LBS
+import Data.List (foldl', sortOn)
+import qualified Data.Map as Map
+import Data.Maybe (catMaybes, listToMaybe, maybeToList, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Text.Lazy as LText
-import qualified Data.Aeson.TH as JSON
+import Data.Time
+import qualified Data.Vector as Vector
+import Debug.Trace (trace, traceShow, traceM, traceShowM)
+import Network.HTTP.Base (urlEncode, urlDecode)
+import qualified Network.HTTP.Conduit as HTTP
 import Network.HTTP.Simple (httpJSON, httpBS)
 import qualified Network.HTTP.Simple as HTTP
-import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Types as HTTP
-import Text.Read (readMaybe)
 import System.FilePath (takeBaseName, dropExtension, (</>), (<.>))
-import Control.Monad (when, forM)
+import Text.Casing as Casing
 import qualified Text.HTML.DOM as HTML
+import Text.Printf (printf)
+import Text.Read (readMaybe)
+import qualified Text.XML as XML
 import qualified Text.XML.Cursor as XML
 import qualified Text.XML.Selectors as XML
 import qualified Text.XML.Selectors.Parsers.JQ as XML
-import qualified Text.XML as XML
-import Data.Maybe (catMaybes, listToMaybe, maybeToList, fromMaybe)
-import Network.HTTP.Base (urlEncode, urlDecode)
-import qualified Data.ByteString.Lazy as LBS
-import Data.Text.Encoding (decodeUtf8)
-import Text.Printf (printf)
-import qualified Data.Aeson as JSON
-import Data.Aeson ( (.:), (.:?), (.!=) )
-import Debug.Trace (trace, traceShow, traceM, traceShowM)
-import qualified Data.Vector as Vector
-import Data.List (foldl', sortOn)
-import Text.Casing as Casing
-import Data.Time
-import qualified Data.Map as Map
 
-import FGEFB.Provider
 import FGEFB.LoadPDF
+import FGEFB.Provider
+import FGEFB.Regex
 import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
 import FGEFB.Util
-import FGEFB.Regex
 
 data ExtractionOf t =
   Extraction
