@@ -46,8 +46,20 @@ regexLiteral = fmap Text.pack $
 
 expr :: Parser Expr
 expr = choice
-  [
+  [ doExpr
+  , letExpr
+  , applicativeExpr
   ]
+
+letBinding :: Parser (Expr -> Expr)
+letBinding =
+  LetE
+    <$> try (symbol "let" *> identifier <* symbol "=")
+    <*> expr
+
+letExpr :: Parser Expr
+letExpr =
+  letBinding <* symbol "in" <*> expr
 
 identifier :: Parser Text
 identifier =
@@ -63,14 +75,44 @@ listExpr :: Parser Expr
 listExpr =
   ListE <$> between (symbol "[") (symbol "]") (expr `sepBy` symbol ",")
 
+groupExpr :: Parser Expr
+groupExpr = between (symbol "(") (symbol ")") expr
+
 doExpr :: Parser Expr
 doExpr = do
   symbol "do"
-  DoE <$> between (symbol "{") (symbol "}") (expr `sepBy` symbol ";")
+  between (symbol "{") (symbol "}") $ do
+    lets <- many (letBinding <* symbol ";")
+    body <- DoE <$> expr `sepBy` symbol ";"
+    return $ foldr ($) body lets
+
+applicativeExpr :: Parser Expr
+applicativeExpr = do
+  lhs <- primitiveExpr
+  xs <- many applicativeTail
+  return $ foldr ($) lhs xs
+
+applicativeTail :: Parser (Expr -> Expr)
+applicativeTail =
+  choice
+    [ indexTail
+    , applyTail
+    ]
+
+indexTail :: Parser (Expr -> Expr)
+indexTail = do
+  indexE <- between (symbol "[") (symbol "]") expr
+  return $ \containerE -> AppE (LitE (BuiltinV IndexB)) [containerE, indexE]
+
+applyTail :: Parser (Expr -> Expr)
+applyTail = do
+  args <- between (symbol "(") (symbol ")") (expr `sepBy` symbol ",")
+  return $ \e -> AppE e args
 
 primitiveExpr :: Parser Expr
 primitiveExpr = choice
   [ LitE <$> val
   , VarE <$> identifier <* whitespace
-  , between (symbol "(") (symbol ")") expr
+  , groupExpr
+  , listExpr
   ]

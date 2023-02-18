@@ -14,45 +14,14 @@ import FGEFB.URL (URL)
 
 data Expr
   = NullE
-    ---- nitty-gritty ----
-    -- | A literal
   | LitE !Val
-    -- | Variable dereference
   | VarE !Text
-    -- | List construct
-  | ListE ![Expr]
-
-    -- TODO:
-    -- ConcatE Expr Expr
-    -- ArithE Operator [Expr]
-    -- LookupE Expr Expr
-    -- LamE [Text] Expr
-    -- AppE Expr [Expr]
-    -- CondE [(Expr,Expr)]
-
-    ---- control flow ----
-    -- | Chain expressions sequentially
+  | LamE [Text] Expr
+  | AppE Expr [Expr]
   | DoE ![Expr]
-    -- | Variable assignment
   | LetE !Text !Expr !Expr
-    -- | For-each (roughly @mapM@)
-  | ForEachE !Text !Expr !Expr
-
-    ---- Miscellany ----
-    -- | HTTP fetch
-  | FetchE !Expr
-    -- | Search-and-replace (regex or text)
-  | ReplaceE !Expr !Expr !Expr
-    -- | Convert text into URL
-  | ParseUrlE !Expr
-
-    ---- DOM ----
-    -- | DOM query
-  | QueryE !Expr !Expr
-    -- | Extract text content from XML element
-  | XmlTextE !Expr
-    -- | Lookup attribute values from XML element
-  | XmlAttribE !Expr !Expr
+  | ListE ![Expr]
+  | DictE ![(Text, Expr)]
   deriving (Show)
 
 instance Semigroup Expr where
@@ -61,6 +30,35 @@ instance Semigroup Expr where
 instance Monoid Expr where
   mappend = (<>)
   mempty = NullE
+
+-- | Built-in functions
+data Builtin
+  = IdentB
+  ---- Arithmetic ----
+  | SumB
+  | ProductB
+  | DiffB
+  | QuotientB
+
+  ---- Collections (strings, lists, dictionaries) ----
+  | ConcatB
+  | ReplaceB
+  | MapB
+  | FoldB
+  | IndexB
+  | SliceB
+  | KeysB
+  | ElemsB
+
+  ---- HTTP ----
+  | FetchB
+  | ParseUrlB
+
+  ---- DOM ----
+  | XmlQueryB
+  | XmlTextB
+  | XmlAttribB
+  deriving (Show, Eq, Ord, Enum, Bounded)
 
 data Val
   = NullV
@@ -72,7 +70,11 @@ data Val
   | XmlV !XML.Cursor
   | ListV ![Val] -- TODO: Use Vector
   | DictV !(Map Text Val)
-    -- TODO: LamV
+  | LamV
+      !(Map Text Val) -- closure
+      ![Text] -- arguments
+      !Expr -- body
+  | BuiltinV Builtin
   deriving (Show)
 
 instance IsString Val where
