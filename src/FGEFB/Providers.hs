@@ -7,6 +7,7 @@ import FGEFB.Providers.GroupProvider
 import FGEFB.Providers.LocalFileProvider
 import FGEFB.Providers.NavaidJsonProvider
 import FGEFB.Providers.HtmlScrapingProvider
+import FGEFB.Providers.ScriptedHtmlScrapingProvider
 
 import qualified Data.Aeson as JSON
 import Data.Aeson ( (.:), (.:?), (.!=) )
@@ -19,7 +20,7 @@ newtype ProviderFactory =
     }
 
 instance JSON.FromJSON ProviderFactory where
-  parseJSON x = JSON.withObject "ProviderFactory" goObj x
+  parseJSON = JSON.withObject "ProviderFactory" goObj
     where
       goObj obj = do
         label <- obj .: "label"
@@ -36,6 +37,11 @@ instance JSON.FromJSON ProviderFactory where
             documentSel <- obj .: "documents"
             return . ProviderFactory $ \context -> 
               htmlScrapingProvider context label root landing folderSel documentSel
+          -- "html-scripted" -> do
+          --   root <- obj .: "url"
+          --   return . ProviderFactory $ \context ->
+          --     scriptedHtmlScrapingProvider context label root
+
           "group" -> do
             subFactories <- obj .: "providers"
             return . ProviderFactory $ \context ->

@@ -1,11 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-module FGEFB.Providers.ScriptedHtmlScrapingProvider.Interpreter
+module Language.ScrapeScript.Interpreter
 where
 
 import Control.Monad.Except
-import Control.Monad.State
+import Control.Monad.Reader
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe, fromMaybe)
@@ -23,7 +23,7 @@ import qualified Text.XML.Cursor as XML
 
 import FGEFB.LoadPDF
 import FGEFB.Provider
-import FGEFB.Providers.ScriptedHtmlScrapingProvider.AST
+import Language.ScrapeScript.AST
 import FGEFB.Regex
 import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
 import FGEFB.XmlUtil
@@ -46,19 +46,12 @@ scLookupVar name ctx =
 
 -- * The Interpreter Monad
 
-type Interpret = ExceptT String (StateT ScriptContext IO)
+type Interpret = ExceptT String (ReaderT ScriptContext IO)
 
 runInterpret :: Map Text Val -> Interpret a -> IO (Either String a)
 runInterpret initialVars a = do
   let ctx = ScriptContext initialVars
-  evalStateT (runExceptT a) ctx
-
-withLocalScope :: Interpret a -> Interpret a
-withLocalScope action = do
-  s <- get
-  r <- action
-  put s
-  return r
+  runReaderT (runExceptT a) ctx
 
 throwTypeError :: String -> Val -> Interpret a
 throwTypeError expected val =
@@ -73,13 +66,12 @@ readURL = eitherInterpret . parseURL
 
 lookupVar :: Text -> Interpret Val
 lookupVar name = do
-  valMay <- gets $ scLookupVar name
+  valMay <- asks $ scLookupVar name
   maybe (throwError $ "Undefined variable: " ++ show name) return valMay
 
 
-assignVar :: Text -> Val -> Interpret ()
-assignVar name val =
-  modify $ scAssignVar name val
+withVar :: Text -> Val -> Interpret a -> Interpret a
+withVar name val = local (scAssignVar name val)
 
 asURL :: Val -> Interpret URL
 asURL (UrlV url) = return url
@@ -122,22 +114,19 @@ lookupMember keyVal container =
 
 -- * Interpreting Statements And Expressions
 
-interpretS :: Statement -> Interpret Val
-interpretS NullS =
-  return NullV
-interpretS (ThenS a b) = interpretS a >> interpretS b
-interpretS (ExpS e) = interpretE e
-interpretS (AssignS name e) = do
-  val <- interpretE e
-  assignVar name val
-  return NullV
-
-interpretE :: Expr -> Interpret Val
-interpretE (LitE val) = return val
-interpretE (VarE name) = lookupVar name
-interpretE (ListE es) = ListV <$> mapM interpretE es
-interpretE (FetchE e) = do
-  urlVal <- interpretE e
+eval :: Expr -> Interpret Val
+eval NullE = return NullV
+eval (DoE []) = return NullV
+eval (DoE [x]) = eval x
+eval (DoE (x:xs)) = eval x >> eval (DoE xs)
+eval (LetE name e body) = do
+  val <- eval e
+  withVar name val $ eval body
+eval (LitE val) = return val
+eval (VarE name) = lookupVar name
+eval (ListE es) = ListV <$> mapM eval es
+eval (FetchE e) = do
+  urlVal <- eval e
   actualURL <- case urlVal of
     UrlV url ->
       return url
@@ -148,10 +137,10 @@ interpretE (FetchE e) = do
     x -> throwTypeError "URL or string" x
   rootURL <- lookupVar "rootURL" >>= asURL
   fetchHTML (renderURL $ rootURL <> actualURL)
-interpretE (ReplaceE needleE replacementE haystackE) = do
-  needle <- interpretE needleE
-  replacement <- asString =<< interpretE replacementE
-  haystack <- asString =<< interpretE haystackE
+eval (ReplaceE needleE replacementE haystackE) = do
+  needle <- eval needleE
+  replacement <- asString =<< eval replacementE
+  haystack <- asString =<< eval haystackE
   case needle of
     RegexV re -> 
       return $ StringV $ reReplace re replacement haystack
@@ -159,29 +148,19 @@ interpretE (ReplaceE needleE replacementE haystackE) = do
       return $ StringV $ Text.replace search replacement haystack
     x ->
       throwTypeError "RegEx or string" x
-interpretE (ParseUrlE e) = do
-  url <- asString =<< interpretE e
+eval (ParseUrlE e) = do
+  url <- asString =<< eval e
   either throwError (return . UrlV) (parseURL url)
-interpretE (QueryE queryE targetE) = do
-  query <- asString =<< interpretE queryE
-  target <- asXml =<< interpretE targetE
+eval (QueryE queryE targetE) = do
+  query <- asString =<< eval queryE
+  target <- asXml =<< eval targetE
   return $ ListV $ map XmlV $ jqQuery query target
-interpretE (StmtE stmt) = interpretS stmt
-interpretE (ForEachE iname body xsE) = do
-  xs <- asList =<< interpretE xsE
-  ListV <$>
-    mapM
-      (\x -> withLocalScope $ do
-        assignVar iname x
-        interpretE body
-      )
-      xs
-interpretE (XmlTextE nodeE) = do
-  e <- asXml =<< interpretE nodeE
+eval (XmlTextE nodeE) = do
+  e <- asXml =<< eval nodeE
   return $ StringV . textContent . XML.node $ e
-interpretE (XmlAttribE attrE nodeE) = do
-  n <- asString =<< interpretE attrE
-  e <- asXml =<< interpretE nodeE
+eval (XmlAttribE attrE nodeE) = do
+  n <- asString =<< eval attrE
+  e <- asXml =<< eval nodeE
   return $ ListV . map StringV $ XML.attribute (uqName n) e
 
 -- * Workhorses

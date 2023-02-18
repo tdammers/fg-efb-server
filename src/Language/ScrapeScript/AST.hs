@@ -1,4 +1,4 @@
-module FGEFB.Providers.ScriptedHtmlScrapingProvider.AST
+module Language.ScrapeScript.AST
 where
 
 import qualified Data.Aeson as JSON
@@ -12,26 +12,11 @@ import Data.String (IsString (..))
 
 import FGEFB.URL (URL)
 
--- TODO: Merge Statement and Expr types (?)
-
-data Statement
-  = NullS
-  | ThenS !Statement !Statement
-  | ExpS !Expr
-  | AssignS !Text !Expr
-  deriving (Show)
-
-instance Semigroup Statement where
-  (<>) = ThenS
-
-instance Monoid Statement where
-  mappend = (<>)
-  mempty = NullS
-
 data Expr
-  = ---- nitty-gritty ----
+  = NullE
+    ---- nitty-gritty ----
     -- | A literal
-    LitE !Val
+  | LitE !Val
     -- | Variable dereference
   | VarE !Text
     -- | List construct
@@ -40,15 +25,16 @@ data Expr
     -- TODO:
     -- ConcatE Expr Expr
     -- ArithE Operator [Expr]
-    -- FlattenE [Expr]
     -- LookupE Expr Expr
     -- LamE [Text] Expr
     -- AppE Expr [Expr]
     -- CondE [(Expr,Expr)]
 
     ---- control flow ----
-    -- | Run a statement as an expression
-  | StmtE !Statement
+    -- | Chain expressions sequentially
+  | DoE ![Expr]
+    -- | Variable assignment
+  | LetE !Text !Expr !Expr
     -- | For-each (roughly @mapM@)
   | ForEachE !Text !Expr !Expr
 
@@ -69,10 +55,18 @@ data Expr
   | XmlAttribE !Expr !Expr
   deriving (Show)
 
+instance Semigroup Expr where
+  a <> b = DoE [a, b]
+
+instance Monoid Expr where
+  mappend = (<>)
+  mempty = NullE
+
 data Val
   = NullV
   | BoolV !Bool
   | StringV !Text
+  | IntV !Integer
   | RegexV !Text
   | UrlV !URL
   | XmlV !XML.Cursor

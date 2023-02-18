@@ -39,23 +39,24 @@ import qualified Text.XML.Cursor as XML
 import qualified Text.XML.Selectors as XML
 import qualified Text.XML.Selectors.Parsers.JQ as XML
 
+import Language.ScrapeScript.AST
+import Language.ScrapeScript.Interpreter
+
 import FGEFB.LoadPDF
 import FGEFB.Provider
-import FGEFB.Providers.ScriptedHtmlScrapingProvider.AST
-import FGEFB.Providers.ScriptedHtmlScrapingProvider.Interpreter
 import FGEFB.Regex
 import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
 import FGEFB.Util
 
 
-htmlScrapingProvider :: ProviderContext
+scriptedHtmlScrapingProvider :: ProviderContext
                      -> Maybe Text
                      -> Text -- ^ root URL
-                     -> Statement -- ^ folder list script
-                     -> Statement -- ^ document list script
-                     -> Statement -- ^ document URL script
+                     -> Expr -- ^ folder list script
+                     -> Expr -- ^ document list script
+                     -> Expr -- ^ document URL script
                      -> Provider
-htmlScrapingProvider context mlabel rootURLText subdirScript docsScript docURLScript =
+scriptedHtmlScrapingProvider context mlabel rootURLText subdirScript docsScript docURLScript =
   Provider
     { label = mlabel
     , getPdfPage = \pathEnc page -> do
@@ -73,7 +74,7 @@ htmlScrapingProvider context mlabel rootURLText subdirScript docsScript docURLSc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
         subfolders <- runScriptWith (asList >=> mapM (makeLink Directory)) extraVars subdirScript
         docs <- runScriptWith (asList >=> mapM (makeLink PDFFile)) extraVars docsScript
-        undefined
+        return $ subfolders ++ docs
     }
   where
     unpackParam :: Text -> Text
@@ -87,10 +88,10 @@ htmlScrapingProvider context mlabel rootURLText subdirScript docsScript docURLSc
       Map.fromList [ ("rootURL", UrlV rootURL) ] <>
       fmap valFromJSON (contextDefs context)
 
-    runScriptWith :: (Val -> Interpret a) -> [(Text, Val)] -> Statement -> IO a
+    runScriptWith :: (Val -> Interpret a) -> [(Text, Val)] -> Expr -> IO a
     runScriptWith convert extraDefs stmt = do
       let vars = Map.fromList extraDefs <> defScriptVars
-      result <- runInterpret vars (interpretS stmt >>= convert)
+      result <- runInterpret vars (eval stmt >>= convert)
       case result of
         Left err -> error err
         Right x -> return x

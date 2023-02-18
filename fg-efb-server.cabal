@@ -33,12 +33,13 @@ executable fg-efb-server
     FGEFB.Providers.LocalFileProvider
     FGEFB.Providers.NavaidJsonProvider
     FGEFB.Providers.ScriptedHtmlScrapingProvider
-    FGEFB.Providers.ScriptedHtmlScrapingProvider.AST
-    FGEFB.Providers.ScriptedHtmlScrapingProvider.Interpreter
     FGEFB.Regex
     FGEFB.URL
     FGEFB.Util
     FGEFB.XmlUtil
+    Language.ScrapeScript.AST
+    Language.ScrapeScript.Interpreter
+    Language.ScrapeScript.Parser
   -- other-extensions:
   build-depends: base >=4.12 && <5
                , aeson >=1.5.5.1 && <2.2.0.0
