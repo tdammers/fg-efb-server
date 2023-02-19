@@ -5,7 +5,6 @@ where
 
 import Data.Maybe (listToMaybe)
 import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Text.XML as XML
 import qualified Text.XML.Cursor as XML
 import qualified Text.XML.Selectors as XML

@@ -2,19 +2,15 @@
 module FGEFB.Providers.LocalFileProvider
 where
 
+import Control.Applicative ( (<|>) )
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import System.FilePath ( (</>), makeRelative, takeExtension, takeBaseName )
 import System.Directory (listDirectory, doesDirectoryExist)
-import System.Process (CreateProcess)
-import qualified System.Process as Process
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.ByteString as BS
-import Data.Maybe (catMaybes, fromMaybe)
-import Control.Applicative ( (<|>) )
+import System.FilePath ( (</>), takeExtension, takeBaseName )
 
-import FGEFB.Provider
 import FGEFB.LoadPDF
+import FGEFB.Provider
 
 classifyFile :: FilePath -> FilePath -> FilePath -> IO (Maybe FileInfo)
 classifyFile rootdir dirname f = do

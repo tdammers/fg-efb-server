@@ -3,17 +3,17 @@
 module FGEFB.Providers.NavaidJsonProvider
 where
 
-import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Data.Aeson as JSON
 import qualified Data.Aeson.TH as JSON
-import Network.HTTP.Simple (httpJSON, httpBS)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Network.HTTP.Simple (httpJSON)
 import qualified Network.HTTP.Simple as HTTP
+import System.FilePath (takeBaseName)
 import Text.Read (readMaybe)
-import System.FilePath (takeBaseName, (</>), (<.>))
 
-import FGEFB.Provider
 import FGEFB.LoadPDF
+import FGEFB.Provider
 import FGEFB.Util
 
 data Entry =
