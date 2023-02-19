@@ -9,6 +9,8 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified System.Console.Haskeline as Haskeline
 import Text.Megaparsec.Error (errorBundlePretty)
+import Text.Megaparsec (initialPos)
+import Control.Exception (displayException)
 
 import qualified Language.ScrapeScript.AST as Script
 import qualified Language.ScrapeScript.Interpreter as Script
@@ -66,10 +68,10 @@ runREPL = do
                 when (replShowAST state) $ do
                   Haskeline.outputStrLn $ show expr
                 interpreterResult <- liftIO $
-                  Script.runInterpret Map.empty (Script.eval expr)
+                  Script.runInterpret (initialPos "") Map.empty (Script.eval expr)
                 case interpreterResult of
                   Left err ->
-                    Haskeline.outputStrLn err
+                    Haskeline.outputStrLn (displayException err)
                   Right result ->
                     Haskeline.outputStrLn . Text.unpack $
                       Script.stringify result

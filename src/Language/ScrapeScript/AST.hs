@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Language.ScrapeScript.AST
 where
@@ -19,34 +20,47 @@ import Data.Default (def)
 import FGEFB.URL (URL, renderURL)
 import FGEFB.XmlUtil
 
-data Expr
-  = NullE
-  | LitE !Val
-  | VarE !Text
-  | LamE [Text] Expr
-  | AppE Expr [Expr]
-  | DoE ![Expr]
-  | LetE !Text !Expr !Expr
-  | ListE ![Expr]
-  | DictE ![(Text, Expr)]
-  deriving (Show)
+data Expr a
+  = NullE a
+  | LitE a !(Val a)
+  | VarE a !Text
+  | LamE a [Text] (Expr a)
+  | AppE a (Expr a) [Expr a]
+  | DoE a ![Expr a]
+  | LetE a !Text !(Expr a) !(Expr a)
+  | ListE a ![Expr a]
+  | DictE a ![(Expr a, Expr a)]
+  deriving (Show, Functor)
 
-isNullE :: Expr -> Bool
-isNullE NullE = True
+exprPos :: Expr a -> a
+exprPos (NullE p) = p
+exprPos (LitE p _) = p
+exprPos (VarE p _) = p
+exprPos (LamE p _ _) = p
+exprPos (AppE p _ _) = p
+exprPos (DoE p _) = p
+exprPos (LetE p _ _ _) = p
+exprPos (ListE p _) = p
+exprPos (DictE p _) = p
+
+isNullE :: Expr a -> Bool
+isNullE (NullE _) = True
 isNullE _ = False
 
-instance Semigroup Expr where
-  a <> b = DoE [a, b]
+instance Monoid a => Semigroup (Expr a) where
+  a <> b = DoE mempty [a, b]
 
-instance Monoid Expr where
+instance Monoid a => Monoid (Expr a) where
   mappend = (<>)
-  mempty = NullE
+  mempty = NullE mempty
 
 -- | Built-in functions
 data Builtin
   = 
   ---- Misc. ----
     IdentB
+  | DebugLogB
+
   ---- Arithmetic ----
   | SumB
   | ProductB
@@ -60,6 +74,7 @@ data Builtin
 
   ---- Collections (strings, lists, dictionaries) ----
   | ConcatB
+  | MatchB
   | ReplaceB
   | MapB
   | FoldB
@@ -69,7 +84,7 @@ data Builtin
   | ElemsB
 
   ---- HTTP ----
-  | FetchB
+  | HttpGetB
   | ParseUrlB
 
   ---- DOM ----
@@ -78,7 +93,7 @@ data Builtin
   | XmlAttribB
   deriving (Show, Eq, Ord, Enum, Bounded)
 
-data Val
+data Val a
   = NullV
   | BoolV !Bool
   | StringV !Text
@@ -86,19 +101,19 @@ data Val
   | RegexV !Text
   | UrlV !URL
   | XmlV !XML.Cursor
-  | ListV ![Val] -- TODO: Use Vector
-  | DictV !(Map Text Val)
+  | ListV ![Val a] -- TODO: Use Vector
+  | DictV !(Map Text (Val a))
   | LamV
-      !(Map Text Val) -- closure
+      !(Map Text (Val a)) -- closure
       ![Text] -- arguments
-      !Expr -- body
+      !(Expr a) -- body
   | BuiltinV Builtin
-  deriving (Show)
+  deriving (Show, Functor)
 
-instance IsString Val where
+instance IsString (Val a) where
   fromString = StringV . Text.pack
 
-valFromJSON :: JSON.Value -> Val
+valFromJSON :: JSON.Value -> Val a
 valFromJSON JSON.Null =
   NullV
 valFromJSON (JSON.String t) =
@@ -112,7 +127,7 @@ valFromJSON (JSON.Array a) =
 valFromJSON (JSON.Object a) =
   DictV . fmap valFromJSON . JSON.toMapText $ a
 
-stringify :: Val -> Text
+stringify :: Val a -> Text
 stringify NullV = "null"
 stringify (BoolV True) = "true"
 stringify (BoolV False) = "false"
@@ -142,7 +157,7 @@ stringify (XmlV cursor) =
     _ ->
       "<!-- XML -->"
 
-truthy :: Val -> Bool
+truthy :: Val a -> Bool
 truthy NullV = False
 truthy (BoolV b) = b
 truthy (ListV xs) = not (null xs)

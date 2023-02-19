@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
 
 module Language.ScrapeScript.Parser
 where
@@ -15,13 +14,13 @@ import Data.Char
 
 import Language.ScrapeScript.AST
 
-parseExprM :: MonadFail m => String -> Text -> m Expr
+parseExprM :: MonadFail m => String -> Text -> m (Expr SourcePos)
 parseExprM filename src =
   case parseExpr filename src of
     Left err -> fail $ errorBundlePretty err
     Right x -> return x
 
-parseExpr :: String -> Text -> Either (ParseErrorBundle Text Void) Expr
+parseExpr :: String -> Text -> Either (ParseErrorBundle Text Void) (Expr SourcePos)
 parseExpr = runParser (expr <* eof)
 
 type Parser = Parsec Void Text
@@ -38,7 +37,7 @@ symbol = void . L.symbol whitespace
 keyword :: Text -> Parser ()
 keyword kw = void . try $ string kw <* notFollowedBy (satisfy isIdent) <* whitespace
 
-val :: Parser Val
+val :: Parser (Val SourcePos)
 val = choice
   [ NullV <$ keyword "null"
   , BoolV True <$ keyword "true"
@@ -55,32 +54,33 @@ regexLiteral :: Parser Text
 regexLiteral = fmap Text.pack $
   char '/' *> manyTill (L.charLiteral <|> (char '\\' *> anySingle)) (char '/')
 
-expr :: Parser Expr
+expr :: Parser (Expr SourcePos)
 expr = letExpr <|> nonLetExpr
 
-nonLetExpr :: Parser Expr
+nonLetExpr :: Parser (Expr SourcePos)
 nonLetExpr =
   choice
     [ doExpr
     , lambdaExpr
     , additiveExpr
-    , return NullE
     ]
 
-letBinding :: Parser (Expr -> Expr)
+letBinding :: Parser (Expr SourcePos -> Expr SourcePos)
 letBinding =
   LetE
-    <$> try (identifier <* whitespace <* symbol "=")
+    <$> getSourcePos
+    <*> try (identifier <* whitespace <* symbol "=")
     <*> expr
 
-letExpr :: Parser Expr
+letExpr :: Parser (Expr SourcePos)
 letExpr =
   letBinding <* keyword "in" <*> expr
 
-lambdaExpr :: Parser Expr
+lambdaExpr :: Parser (Expr SourcePos)
 lambdaExpr =
   LamE
-    <$> try
+    <$> getSourcePos
+    <*> try
           ( between
               (symbol "(") (symbol ")")
               (identifier `sepBy` symbol ",")
@@ -98,35 +98,47 @@ isIdentInitial c = isAlpha c || c == '_'
 isIdent :: Char -> Bool
 isIdent c = isAlphaNum c || c == '_'
 
-listExpr :: Parser Expr
+listExpr :: Parser (Expr SourcePos)
 listExpr =
-  ListE <$> between (symbol "[") (symbol "]") (expr `sepBy` symbol ",")
+  ListE
+    <$> getSourcePos
+    <*> between (symbol "[") (symbol "]") (expr `sepBy` symbol ",")
 
-groupExpr :: Parser Expr
+dictExpr :: Parser (Expr SourcePos)
+dictExpr =
+  DictE
+    <$> getSourcePos
+    <*> between (symbol "{") (symbol "}") (pair `sepBy` symbol ",")
+  where
+    pair :: Parser (Expr SourcePos, Expr SourcePos)
+    pair = (,) <$> expr <* symbol ":" <*> expr
+
+groupExpr :: Parser (Expr SourcePos)
 groupExpr = between (symbol "(") (symbol ")") expr
 
-doExpr :: Parser Expr
+doExpr :: Parser (Expr SourcePos)
 doExpr = do
+  p <- getSourcePos
   keyword "do"
   parts <- between (symbol "{") (symbol "}") (doPart `sepBy` symbol ";")
-  return $ foldDoParts parts
+  return $ foldDoParts p parts
 
 data DoPart
-  = DoLet (Expr -> Expr)
-  | DoNonLet Expr
+  = DoLet (Expr SourcePos -> Expr SourcePos)
+  | DoNonLet (Expr SourcePos)
 
-foldDoParts :: [DoPart] -> Expr
-foldDoParts [] =
-  NullE
-foldDoParts [DoNonLet e] =
+foldDoParts :: SourcePos -> [DoPart] -> Expr SourcePos
+foldDoParts p [] =
+  NullE p
+foldDoParts _ [DoNonLet e] =
   e
-foldDoParts (DoLet binding : xs) =
-  binding (foldDoParts xs)
-foldDoParts xs =
+foldDoParts p (DoLet binding : xs) =
+  binding (foldDoParts p xs)
+foldDoParts p xs =
   let (nonlets, lets) = takeNonLets xs
-  in DoE (filter (not . isNullE) $ nonlets ++ [foldDoParts lets])
+  in DoE p (filter (not . isNullE) $ nonlets ++ [foldDoParts p lets])
 
-takeNonLets :: [DoPart] -> ([Expr], [DoPart])
+takeNonLets :: [DoPart] -> ([Expr SourcePos], [DoPart])
 takeNonLets [] = ([], [])
 takeNonLets (DoLet binding : xs) = ([], DoLet binding : xs)
 takeNonLets (DoNonLet x : xs) =
@@ -144,55 +156,48 @@ doPartNonLet :: Parser DoPart
 doPartNonLet =
   DoNonLet <$> nonLetExpr
 
-additiveExpr :: Parser Expr
-additiveExpr = do
-  lhs <- multiplicativeExpr
-  xs <- many additiveTail
+binaryExpr :: Parser (Expr SourcePos) -- ^ operand parser
+           -> [ (Parser (), Builtin) ] -- ^ (operator, operation)
+           -> Parser (Expr SourcePos)
+binaryExpr operandP operations = do
+  lhs <- operandP
+  xs <- many (binaryTail operandP operations)
   return $ foldr ($) lhs (reverse xs)
 
-additiveTail :: Parser (Expr -> Expr)
-additiveTail =
+binaryTail :: Parser (Expr SourcePos)
+           -> [ (Parser (), Builtin) ]
+           -> Parser (Expr SourcePos -> Expr SourcePos)
+binaryTail rhsP operations = do
+  p <- getSourcePos
   choice
-    [ do
-        symbol "+"
-        rhs <- multiplicativeExpr
-        return $ \lhs -> AppE (LitE $ BuiltinV SumB) [lhs, rhs]
-    , do
-        symbol "-"
-        rhs <- multiplicativeExpr
-        return $ \lhs -> AppE (LitE $ BuiltinV DiffB) [lhs, rhs]
-    , do
-        symbol "~"
-        rhs <- multiplicativeExpr
-        return $ \lhs -> AppE (LitE $ BuiltinV ConcatB) [lhs, rhs]
+    [ do { operatorP; rhs <- rhsP; return $ \lhs -> AppE p (LitE p $ BuiltinV operation) [ lhs, rhs ] }
+    | (operatorP, operation) <- operations
     ]
 
-multiplicativeExpr :: Parser Expr
-multiplicativeExpr = do
-  lhs <- applicativeExpr
-  xs <- many multiplicativeTail
-  return $ foldr ($) lhs (reverse xs)
-
-multiplicativeTail :: Parser (Expr -> Expr)
-multiplicativeTail =
-  choice
-    [ do
-        symbol "*"
-        rhs <- applicativeExpr
-        return $ \lhs -> AppE (LitE $ BuiltinV ProductB) [lhs, rhs]
-    , do
-        symbol "/"
-        rhs <- applicativeExpr
-        return $ \lhs -> AppE (LitE $ BuiltinV QuotientB) [lhs, rhs]
+additiveExpr :: Parser (Expr SourcePos)
+additiveExpr =
+  binaryExpr
+    multiplicativeExpr
+    [ (symbol "+", SumB)
+    , (symbol "-", DiffB)
+    , (symbol "~", ConcatB)
     ]
 
-applicativeExpr :: Parser Expr
+multiplicativeExpr :: Parser (Expr SourcePos)
+multiplicativeExpr =
+  binaryExpr
+    applicativeExpr
+    [ (symbol "*", ProductB)
+    , (symbol "/", QuotientB)
+    ]
+
+applicativeExpr :: Parser (Expr SourcePos)
 applicativeExpr = do
   lhs <- primitiveExpr
   xs <- many applicativeTail
   return $ foldr ($) lhs (reverse xs)
 
-applicativeTail :: Parser (Expr -> Expr)
+applicativeTail :: Parser (Expr SourcePos -> Expr SourcePos)
 applicativeTail =
   choice
     [ indexTail
@@ -200,36 +205,40 @@ applicativeTail =
     , dotTail
     ]
 
-indexTail :: Parser (Expr -> Expr)
+indexTail :: Parser (Expr SourcePos -> Expr SourcePos)
 indexTail = do
+  p <- getSourcePos
   between (symbol "[") (symbol "]") $ do
     lhs <- expr
-    maybe (indexF lhs) (sliceF lhs) <$> optional (symbol ":" *> optional expr)
+    maybe (indexF p lhs) (sliceF p lhs) <$> optional (symbol ":" *> optional expr)
   where
-    indexF lhsE containerE =
-      AppE (LitE (BuiltinV IndexB)) [containerE, lhsE]
-    sliceF lhsE (Just rhsE) containerE =
-      AppE (LitE (BuiltinV SliceB)) [containerE, lhsE, rhsE]
-    sliceF lhsE Nothing containerE =
-      AppE (LitE (BuiltinV SliceB)) [containerE, lhsE]
+    indexF p lhsE containerE =
+      AppE p (LitE p (BuiltinV IndexB)) [containerE, lhsE]
+    sliceF p lhsE (Just rhsE) containerE =
+      AppE p (LitE p (BuiltinV SliceB)) [containerE, lhsE, rhsE]
+    sliceF p lhsE Nothing containerE =
+      AppE p (LitE p (BuiltinV SliceB)) [containerE, lhsE]
 
-dotTail :: Parser (Expr -> Expr)
+dotTail :: Parser (Expr SourcePos -> Expr SourcePos)
 dotTail = do
-  key <- symbol "." *> identifier
+  p <- getSourcePos
+  key <- symbol "." *> identifier <* whitespace
   return $ \containerE ->
-    AppE
-      (LitE (BuiltinV IndexB))
-      [containerE, LitE (StringV key)]
+    AppE p
+      (LitE p (BuiltinV IndexB))
+      [containerE, LitE p (StringV key)]
 
-applyTail :: Parser (Expr -> Expr)
+applyTail :: Parser (Expr SourcePos -> Expr SourcePos)
 applyTail = do
+  p <- getSourcePos
   args <- between (symbol "(") (symbol ")") (expr `sepBy` symbol ",")
-  return $ \e -> AppE e args
+  return $ \e -> AppE p e args
 
-primitiveExpr :: Parser Expr
+primitiveExpr :: Parser (Expr SourcePos)
 primitiveExpr = choice
-  [ LitE <$> val
-  , VarE <$> identifier <* whitespace
+  [ LitE <$> getSourcePos <*> val
+  , VarE <$> getSourcePos <*> identifier <* whitespace
   , groupExpr
   , listExpr
+  , dictExpr
   ]

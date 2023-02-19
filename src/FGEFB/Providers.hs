@@ -42,9 +42,9 @@ instance JSON.FromJSON ProviderFactory where
               htmlScrapingProvider context label root landing folderSel documentSel
           "html-scripted" -> do
             root <- obj .: "url"
-            folderListExpr <- obj .: "folders" >>= parseExprM ""
-            docListExpr <- obj .: "documents" >>= parseExprM ""
-            docUrlExpr <- obj .: "document" >>= parseExprM ""
+            folderListExpr <- obj .: "folders" >>= parseExprM "folder list"
+            docListExpr <- obj .: "documents" >>= parseExprM "document list"
+            docUrlExpr <- obj .: "document" >>= parseExprM "document"
             return . ProviderFactory $ \context ->
               scriptedHtmlScrapingProvider
                 context label root

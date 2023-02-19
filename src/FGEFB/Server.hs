@@ -2,9 +2,11 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module FGEFB.Server
 where
 
+import Control.Exception
 import Control.Monad (forM_)
 import qualified Data.Aeson as JSON
 import Data.Bool (bool)
@@ -223,10 +225,12 @@ runServer = do
           [ ("airac", JSON.toJSON $ airacDetails airac)
           ]
         <> defs'
-  print defs
 
-  providerFactories <- loadFirstConfigFileOrElse defProviders "providers.yaml"
-  let context = defProviderContext { contextDefs = defs }
-      providers = fmap (\factory -> makeProvider factory context) providerFactories
+  (do
+      providerFactories <-
+        loadFirstConfigFileOrElse defProviders "providers.yaml"
+      let context = defProviderContext { contextDefs = defs }
+          providers = fmap (\factory -> makeProvider factory context) providerFactories
 
-  runServerWith providers
+      runServerWith providers
+    ) `catch` (\(err :: SomeException) -> putStrLn $ displayException err)

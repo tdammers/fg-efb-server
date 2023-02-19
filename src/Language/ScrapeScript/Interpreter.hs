@@ -14,6 +14,7 @@ import qualified Data.Map as Map
 import Data.Maybe (mapMaybe, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
@@ -23,6 +24,7 @@ import Text.Printf (printf)
 import Text.Read (readMaybe)
 import qualified Text.XML as XML
 import qualified Text.XML.Cursor as XML
+import Text.Megaparsec (SourcePos, sourcePosPretty)
 
 import FGEFB.Regex
 import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
@@ -30,29 +32,53 @@ import FGEFB.Util
 import FGEFB.XmlUtil
 import Language.ScrapeScript.AST
 
+-- * Runtime errors
+
+data RuntimeError p =
+  RuntimeError
+    { runtimeErrorLocation :: p
+    , runtimeErrorMessage :: String
+    }
+
+instance Show (RuntimeError SourcePos) where
+  show (RuntimeError p msg) =
+    sourcePosPretty p ++ ": " ++ msg
+
+instance Exception (RuntimeError SourcePos) where
+
 -- * Script Contexts
 
-newtype ScriptContext =
+data ScriptContext p =
   ScriptContext
-    { scriptVars :: Map Text Val
+    { scriptVars :: Map Text (Val p)
+    , scriptPos :: p
     }
     deriving (Show)
 
-scAssignVar :: Text -> Val -> ScriptContext -> ScriptContext
+scAssignVar :: Text -> Val p -> ScriptContext p -> ScriptContext p
 scAssignVar name val ctx =
   ctx { scriptVars = Map.insert name val (scriptVars ctx) }
 
-scAssignVars :: Map Text Val -> ScriptContext -> ScriptContext
+scAssignVars :: Map Text (Val p) -> ScriptContext p -> ScriptContext p
 scAssignVars vars ctx =
   ctx { scriptVars = vars <> scriptVars ctx }
 
-scLookupVar :: Text -> ScriptContext -> Maybe Val
+scLookupVar :: Text -> ScriptContext p -> Maybe (Val p)
 scLookupVar name ctx =
   Map.lookup name (scriptVars ctx)
 
-defVars :: Map Text Val
+scSetPos :: p -> ScriptContext p -> ScriptContext p
+scSetPos p ctx =
+  ctx { scriptPos = p }
+
+defVars :: Map Text (Val p)
 defVars = Map.fromList
   [ ("ident", BuiltinV IdentB)
+  ---- Debugging ----
+  , ("Debug", DictV $ Map.fromList
+      [ ("log", BuiltinV DebugLogB)
+      ]
+    )
   ---- Arithmetic ----
   , ("sum", BuiltinV SumB)
   , ("product", BuiltinV ProductB)
@@ -75,7 +101,10 @@ defVars = Map.fromList
   , ("elems", BuiltinV ElemsB)
 
   ---- HTTP ----
-  , ("fetch", BuiltinV FetchB)
+  , ("HTTP", DictV $ Map.fromList
+      [ ("get", BuiltinV HttpGetB)
+      ]
+    )
 
   ---- URL ----
   , ("URL", DictV $ Map.fromList
@@ -94,55 +123,68 @@ defVars = Map.fromList
 
 -- * The Interpreter Monad
 
-type Interpret = ExceptT String (ReaderT ScriptContext IO)
+type Interpret p = ExceptT (RuntimeError p) (ReaderT (ScriptContext p) IO)
 
-runInterpret :: Map Text Val -> Interpret a -> IO (Either String a)
-runInterpret initialVars a = do
-  let ctx = ScriptContext (initialVars <> defVars)
+runInterpret :: p -> Map Text (Val p) -> Interpret p a -> IO (Either (RuntimeError p) a)
+runInterpret p initialVars a = do
+  let ctx = ScriptContext (initialVars <> defVars) p
   runReaderT (runExceptT a) ctx
 
-throwTypeError :: String -> Val -> Interpret a
-throwTypeError expected val =
-  throwError $ printf "Type error: expected %s, but found %s" expected (show val)
+throwRuntimeError :: String -> Interpret p a
+throwRuntimeError msg = do
+  p <- asks scriptPos
+  throwError $ RuntimeError p msg
 
-eitherInterpret :: Either String a -> Interpret a
-eitherInterpret (Left err) = throwError err
+throwTypeError :: String -> Val p -> Interpret p a
+throwTypeError expected val =
+  throwRuntimeError $ printf "Type error: expected %s, but found %s" expected (stringify val)
+
+eitherInterpret :: Either String a -> Interpret p a
+eitherInterpret (Left err) = throwRuntimeError err
 eitherInterpret (Right a) = return a
 
-readURL :: Text -> Interpret URL
+readURL :: Text -> Interpret p URL
 readURL = eitherInterpret . parseURL
 
-lookupVar :: Text -> Interpret Val
+lookupVar :: Text -> Interpret p (Val p)
 lookupVar name = do
   valMay <- asks $ scLookupVar name
-  maybe (throwError $ "Undefined variable: " ++ show name) return valMay
+  maybe (throwRuntimeError $ "Undefined variable: " ++ show name) return valMay
 
-lookupVarDef :: Val -> Text -> Interpret Val
+lookupVarDef :: Val p -> Text -> Interpret p (Val p)
 lookupVarDef defVal name = do
   asks $ fromMaybe defVal . scLookupVar name
 
-getVars :: Interpret (Map Text Val)
+getVars :: Interpret p (Map Text (Val p))
 getVars = asks scriptVars
 
-withVar :: Text -> Val -> Interpret a -> Interpret a
+withVar :: Text -> Val p -> Interpret p a -> Interpret p a
 withVar name val = local (scAssignVar name val)
 
-withVars :: Map Text Val -> Interpret a -> Interpret a
+withVars :: Map Text (Val p) -> Interpret p a -> Interpret p a
 withVars vars = local (scAssignVars vars)
 
-asURL :: Val -> Interpret URL
+atPos :: p -> Interpret p a -> Interpret p a
+atPos p = local (scSetPos p)
+
+asURL :: Val p -> Interpret p URL
 asURL (UrlV url) = return url
 asURL x = throwTypeError "URL" x
 
-asXML :: Val -> Interpret XML.Cursor
+asXML :: Val p -> Interpret p XML.Cursor
 asXML (XmlV xml) = return xml
 asXML x = throwTypeError "XML" x
 
-asString :: Val -> Interpret Text
+asString :: Val p -> Interpret p Text
 asString (StringV str) = return str
 asString x = throwTypeError "string" x
 
-asInt :: Val -> Interpret Int
+asUrlString :: Val p -> Interpret p Text
+asUrlString (StringV str) = return str
+asUrlString (UrlV url) = return $ renderURL url
+asUrlString x = throwTypeError "string" x
+
+asInt :: Val p -> Interpret p Int
 asInt (StringV str)
   | Just i <- readMaybe (Text.unpack str)
   = return i
@@ -150,7 +192,7 @@ asInt (IntV i)
   = return $ fromInteger i
 asInt x = throwTypeError "integer" x
 
-asInteger :: Val -> Interpret Integer
+asInteger :: Val p -> Interpret p Integer
 asInteger (StringV str)
   | Just i <- readMaybe (Text.unpack str)
   = return i
@@ -158,19 +200,19 @@ asInteger (IntV i)
   = return i
 asInteger x = throwTypeError "integer" x
 
-asList :: Val -> Interpret [Val]
+asList :: Val p -> Interpret p [Val p]
 asList (ListV xs) = return xs
 asList x = throwTypeError "list" x
 
-asDict :: Val -> Interpret (Map Text Val)
+asDict :: Val p -> Interpret p (Map Text (Val p))
 asDict (DictV xs) = return xs
 asDict x = throwTypeError "dictionary" x
 
-asXml :: Val -> Interpret XML.Cursor
+asXml :: Val p -> Interpret p XML.Cursor
 asXml (XmlV xml) = return xml
 asXml x = throwTypeError "XML" x
 
-lookupMember :: Val -> Val -> Interpret Val
+lookupMember :: Val p -> Val p -> Interpret p (Val p)
 lookupMember keyVal container =
   case container of
     DictV dict -> do
@@ -191,12 +233,13 @@ lookupMember keyVal container =
           case key of
             "replace" -> do
               scope <- asks scriptVars
+              p <- asks scriptPos
               return $
                 LamV
                   scope
                   ["needle", "replacement"]
-                  (AppE (LitE (BuiltinV ReplaceB))
-                    [ VarE "needle", VarE "replacement", LitE container ]
+                  (AppE p (LitE p (BuiltinV ReplaceB))
+                    [ VarE p "needle", VarE p "replacement", LitE p container ]
                   )
             _ -> return NullV
         x -> throwTypeError "integer or string" x
@@ -214,6 +257,11 @@ lookupMember keyVal container =
           return $ maybe NullV (DictV . fmap (maybe NullV StringV) . Map.fromList) $ urlQuery url
         "anchor" ->
           return $ maybe NullV StringV $ urlAnchor url
+        "relative" ->
+          return $ UrlV url
+            { urlProtocol = Nothing
+            , urlHostName = Nothing
+            }
         _ -> return NullV
 
     XmlV target -> do
@@ -221,12 +269,23 @@ lookupMember keyVal container =
       case key of
         "query" -> do
           scope <- asks scriptVars
+          p <- asks scriptPos
           return $
             LamV
               scope
               ["query"]
-              (AppE (LitE (BuiltinV XmlQueryB))
-                [ VarE "query", LitE container ]
+              (AppE p (LitE p (BuiltinV XmlQueryB))
+                [ VarE p "query", LitE p container ]
+              )
+        "attr" -> do
+          scope <- asks scriptVars
+          p <- asks scriptPos
+          return $
+            LamV
+              scope
+              ["attrName"]
+              (AppE p (LitE p (BuiltinV XmlAttribB))
+                [ LitE p container, VarE p "attrName" ]
               )
         "text" -> do
           let node = XML.node target
@@ -234,19 +293,19 @@ lookupMember keyVal container =
         _ -> return NullV
     x -> throwTypeError "container" x
 
-nth :: [Val] -> Int -> Interpret Val
+nth :: [Val p] -> Int -> Interpret p (Val p)
 nth args i
   | i < 0
-  = throwError $ "Negative argument index " ++ show i
+  = throwRuntimeError $ "Negative argument index " ++ show i
   | i < length args
   = return $ args !! i
   | otherwise
-  = throwError $ "Argument " ++ show i ++ " not given"
+  = throwRuntimeError $ "Argument " ++ show i ++ " not given"
 
-nthMay :: [Val] -> Int -> Interpret (Maybe Val)
+nthMay :: [Val p] -> Int -> Interpret p (Maybe (Val p))
 nthMay args i
   | i < 0
-  = throwError $ "Negative argument index " ++ show i
+  = throwRuntimeError $ "Negative argument index " ++ show i
   | i < length args
   = return . Just $ args !! i
   | otherwise
@@ -254,30 +313,31 @@ nthMay args i
 
 -- * Interpreting Statements And Expressions
 
-eval :: Expr -> Interpret Val
-eval NullE = return NullV
-eval (DoE []) = return NullV
-eval (DoE [x]) = eval x
-eval (DoE (x:xs)) = eval x >> eval (DoE xs)
-eval (LetE name e body) = do
+eval :: Expr p -> Interpret p (Val p)
+eval (NullE _p) = return NullV
+eval (DoE _p []) = return NullV
+eval (DoE p [x]) = atPos p $ eval x
+eval (DoE p (x:xs)) = atPos p $ eval x >> eval (DoE p xs)
+eval (LetE p name e body) = atPos p $ do
   val <- eval e
   withVar name val $ eval body
-eval (LitE val) = return val
-eval (VarE name) = lookupVar name
-eval (ListE es) =
+eval (LitE _p val) = return val
+eval (VarE p name) = atPos p $ lookupVar name
+eval (ListE p es) =
+  atPos p $
   ListV <$> mapM eval es
-eval (DictE pairs) =
+eval (DictE p pairs) = atPos p $ do
   DictV . Map.fromList <$>
-    mapM (\(k, v) -> (k ,) <$> eval v) pairs
-eval (LamE argNames body) = do
+    mapM (\(k, v) -> (,) <$> (eval k >>= asString) <*> eval v) pairs
+eval (LamE p argNames body) = atPos p $ do
   closure <- getVars
   return $ LamV closure argNames body
-eval (AppE fE argEs) = do
+eval (AppE p fE argEs) = atPos p $ do
   f <- eval fE
   args <- mapM eval argEs
   apply f args
 
-apply :: Val -> [Val] -> Interpret Val
+apply :: Val p -> [Val p] -> Interpret p (Val p)
 apply f args =
   case f of
     LamV closure argNames body ->
@@ -286,6 +346,10 @@ apply f args =
       eval body
 
     BuiltinV IdentB ->
+      args `nth` 0
+
+    BuiltinV DebugLogB -> do
+      liftIO $ Text.putStrLn . Text.intercalate ", " . map stringify $ args
       args `nth` 0
 
     BuiltinV SumB -> do
@@ -388,14 +452,14 @@ apply f args =
           return $ StringV $ Text.take size' . Text.drop start' $ xs
         x -> throwTypeError "container or string" x
 
-    BuiltinV FetchB -> do
+    BuiltinV HttpGetB -> do
       urlVal <- args `nth` 0
       actualURL <- case urlVal of
         UrlV url ->
           return url
         StringV urlText -> do
           case parseURL urlText of
-            Left err -> throwError err
+            Left err -> throwRuntimeError err
             Right url -> return (normalizeURL url)
         x -> throwTypeError "URL or string" x
       rootURL <- lookupVarDef (UrlV mempty) "rootURL" >>= asURL
@@ -411,9 +475,19 @@ apply f args =
           return $ StringV $ Text.replace search replacement haystack
         x ->
           throwTypeError "RegEx or string" x
+    BuiltinV MatchB -> do
+      needle <- args `nth` 0
+      haystack <- asString =<< args `nth` 2
+      case needle of
+        RegexV re -> 
+          return $ BoolV $ reTest re haystack
+        StringV search ->
+          return $ BoolV $ search `Text.isInfixOf` haystack
+        x ->
+          throwTypeError "RegEx or string" x
     BuiltinV ParseUrlB -> do
       url <- asString =<< args `nth` 0
-      either throwError (return . UrlV) (parseURL url)
+      either throwRuntimeError (return . UrlV) (parseURL url)
     BuiltinV XmlQueryB -> do
       query <- asString =<< args `nth` 0
       target <- asXml =<< args `nth` 1
@@ -431,20 +505,21 @@ apply f args =
       return $ ListV . map StringV $ XML.attribute (uqName n) e
 
     -- BuiltinV b ->
-    --   throwError $ "Not implemented: " ++ show b
+    --   throwRuntimeError $ "Not implemented: " ++ show b
 
     x ->
-      throwError $ "Not a function: " ++ show x
+      throwRuntimeError $ "Not a function: " ++ Text.unpack (stringify x)
 
 -- * Workhorses
 
-fetchHTML :: Text -> Interpret Val
-fetchHTML url =
-  XmlV . XML.fromDocument <$> go url 12
+fetchHTML :: forall p. Text -> Interpret p (Val p)
+fetchHTML urlInitial =
+  XmlV . XML.fromDocument <$> go urlInitial 12
   where
-    go :: Text -> Int -> Interpret XML.Document
-    go _url 0 = throwError "Maximum redirect count exceeded"
-    go _url n = do
+    go :: Text -> Int -> Interpret p XML.Document
+    go _url 0 =
+      throwRuntimeError "Maximum redirect count exceeded"
+    go url n = do
       liftIO $ printf "HTTP GET %s\n" url
       rq <- HTTP.parseRequest (Text.unpack url)
       rp <- HTTP.httpLBS rq { HTTP.redirectCount = 0 }
@@ -455,14 +530,18 @@ fetchHTML url =
         let mlocation = lookup "Location" $ HTTP.getResponseHeaders rp
         case mlocation of
           Nothing ->
-            throwError "Missing location header"
+            throwRuntimeError "Missing location header"
           Just location -> do
             liftIO $ printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
-            urlLeft <- either throwError return (parseURL url)
-            urlRight <- either throwError return (parseURL (decodeUtf8 location))
+            urlLeft <- either throwRuntimeError return (parseURL url)
+            urlRight <- either throwRuntimeError return (parseURL (decodeUtf8 location))
             let url' = renderURL $ urlLeft <> urlRight
+            liftIO $ print urlLeft
+            liftIO $ print urlRight
+            liftIO $ print (urlLeft <> urlRight)
+            liftIO $ print url'
             if url' == url then
-              throwError $ "Infinite redirection (location): " <> show url
+              throwRuntimeError $ "Infinite redirection (location): " <> show url
             else do
               go url' (n - 1)
       else do
@@ -477,7 +556,7 @@ fetchHTML url =
           url':_ -> do
             liftIO $ printf "Redirecting due to meta refresh: %s\n" url'
             if url' == url then
-              throwError $ "Infinite redirection (meta refresh): " <> show url
+              throwRuntimeError $ "Infinite redirection (meta refresh): " <> show url
             else
               go url' (n - 1)
           [] -> do
@@ -496,7 +575,7 @@ fetchHTML url =
             _ ->
               Nothing
 
-combineURLs :: Text -> Text -> Interpret Text
+combineURLs :: Text -> Text -> Interpret p Text
 combineURLs current new = do
   currentURL <- readURL current
   newURL <- readURL new

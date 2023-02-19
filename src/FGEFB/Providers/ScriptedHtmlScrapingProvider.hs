@@ -7,11 +7,13 @@ module FGEFB.Providers.ScriptedHtmlScrapingProvider
 where
 
 import Control.Monad.Except
+import Control.Exception
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Network.HTTP.Base (urlDecode)
+import Text.Megaparsec.Pos (SourcePos, initialPos)
 
 import Language.ScrapeScript.AST
 import Language.ScrapeScript.Interpreter
@@ -23,9 +25,9 @@ import FGEFB.URL (renderURL, parseURL, URL (..))
 scriptedHtmlScrapingProvider :: ProviderContext
                      -> Maybe Text
                      -> Text -- ^ root URL
-                     -> Expr -- ^ folder list script
-                     -> Expr -- ^ document list script
-                     -> Expr -- ^ document URL script
+                     -> Expr SourcePos -- ^ folder list script
+                     -> Expr SourcePos -- ^ document list script
+                     -> Expr SourcePos -- ^ document URL script
                      -> Provider
 scriptedHtmlScrapingProvider context mlabel rootURLText subdirScript docsScript docURLScript =
   Provider
@@ -35,6 +37,7 @@ scriptedHtmlScrapingProvider context mlabel rootURLText subdirScript docsScript 
             pathURL = either (const NullV) UrlV $ parseURL . unpackParam $ pathEnc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
         localURL <- runScriptWith
+                      (initialPos "document script")
                       asURL
                       extraVars
                       docURLScript
@@ -43,8 +46,18 @@ scriptedHtmlScrapingProvider context mlabel rootURLText subdirScript docsScript 
         let pathText = unpackParam pathEnc
             pathURL = either (const NullV) UrlV $ parseURL . unpackParam $ pathEnc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
-        subfolders <- runScriptWith (asList >=> mapM (makeLink Directory)) extraVars subdirScript
-        docs <- runScriptWith (asList >=> mapM (makeLink PDFFile)) extraVars docsScript
+        subfolders <-
+          runScriptWith
+            (initialPos "folders script")
+            (asList >=> mapM (makeLink Directory))
+            extraVars
+            subdirScript
+        docs <-
+          runScriptWith
+            (initialPos "documents script")
+            (asList >=> mapM (makeLink PDFFile))
+            extraVars
+            docsScript
         return $ subfolders ++ docs
     }
   where
@@ -54,23 +67,27 @@ scriptedHtmlScrapingProvider context mlabel rootURLText subdirScript docsScript 
     rootURL :: URL
     rootURL = either error id $ parseURL rootURLText
 
-    defScriptVars :: Map Text Val
+    defScriptVars :: Map Text (Val SourcePos)
     defScriptVars =
       Map.fromList [ ("rootURL", UrlV rootURL) ] <>
       fmap valFromJSON (contextDefs context)
 
-    runScriptWith :: (Val -> Interpret a) -> [(Text, Val)] -> Expr -> IO a
-    runScriptWith convert extraDefs stmt = do
+    runScriptWith :: SourcePos
+                  -> (Val SourcePos -> Interpret SourcePos a)
+                  -> [(Text, Val SourcePos)]
+                  -> Expr SourcePos
+                  -> IO a
+    runScriptWith p convert extraDefs stmt = do
       let vars = Map.fromList extraDefs <> defScriptVars
-      result <- runInterpret vars (eval stmt >>= convert)
+      result <- runInterpret p vars (eval stmt >>= convert)
       case result of
-        Left err -> error err
+        Left err -> throw err
         Right x -> return x
 
-    makeLink :: FileType -> Val -> Interpret FileInfo
+    makeLink :: FileType -> Val SourcePos -> Interpret SourcePos FileInfo
     makeLink fileType val = do
-      fileName <- asString =<< lookupMember "name" val
-      filePath <- asString =<< lookupMember "path" val
+      fileName <- asUrlString =<< lookupMember "name" val
+      filePath <- asUrlString =<< lookupMember "path" val
       return FileInfo
         { fileName
         , filePath
