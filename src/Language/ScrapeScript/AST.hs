@@ -127,12 +127,18 @@ stringify (DictV pairs) =
 stringify (LamV {}) =
   "<<lambda>>"
 stringify (BuiltinV b) =
-  "$" <> Text.pack (show b) <> "$"
+  "<<builtin:" <> (Text.dropEnd 1 . Text.pack $ show b) <> ">>"
 stringify (XmlV cursor) =
   case XML.node cursor of
     XML.NodeElement e ->
-      let doc = xmlFragmentToDocument e
-      in LText.toStrict $ XML.renderText def doc
+      let doc = xmlFragmentToDocumentNoPrologue e
+      in LText.toStrict $
+            XML.renderText
+              def
+                { XML.rsXMLDeclaration = False
+                , XML.rsPretty = True
+                }
+              doc
     _ ->
       "<!-- XML -->"
 

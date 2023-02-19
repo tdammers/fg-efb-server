@@ -6,6 +6,7 @@
 module Language.ScrapeScript.Interpreter
 where
 
+import Control.Exception
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Map (Map)
@@ -25,6 +26,7 @@ import qualified Text.XML.Cursor as XML
 
 import FGEFB.Regex
 import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
+import FGEFB.Util
 import FGEFB.XmlUtil
 import Language.ScrapeScript.AST
 
@@ -74,12 +76,20 @@ defVars = Map.fromList
 
   ---- HTTP ----
   , ("fetch", BuiltinV FetchB)
-  , ("parseUrl", BuiltinV ParseUrlB)
+
+  ---- URL ----
+  , ("URL", DictV $ Map.fromList
+      [ ("parse", BuiltinV ParseUrlB)
+      ]
+    )
 
   ---- DOM ----
-  , ("xmlQuery", BuiltinV XmlQueryB)
-  , ("xmlText", BuiltinV XmlTextB)
-  , ("xmlAttrib", BuiltinV XmlAttribB)
+  , ("DOM", DictV $ Map.fromList
+      [ ("query", BuiltinV XmlQueryB)
+      , ("text", BuiltinV XmlTextB)
+      , ("attrib", BuiltinV XmlAttribB)
+      ]
+    )
   ]
 
 -- * The Interpreter Monad
@@ -107,6 +117,10 @@ lookupVar name = do
   valMay <- asks $ scLookupVar name
   maybe (throwError $ "Undefined variable: " ++ show name) return valMay
 
+lookupVarDef :: Val -> Text -> Interpret Val
+lookupVarDef defVal name = do
+  asks $ fromMaybe defVal . scLookupVar name
+
 getVars :: Interpret (Map Text Val)
 getVars = asks scriptVars
 
@@ -119,6 +133,10 @@ withVars vars = local (scAssignVars vars)
 asURL :: Val -> Interpret URL
 asURL (UrlV url) = return url
 asURL x = throwTypeError "URL" x
+
+asXML :: Val -> Interpret XML.Cursor
+asXML (XmlV xml) = return xml
+asXML x = throwTypeError "XML" x
 
 asString :: Val -> Interpret Text
 asString (StringV str) = return str
@@ -164,10 +182,56 @@ lookupMember keyVal container =
         (x:_) -> return x
         _ -> return NullV
     StringV txt -> do
-      key <- asInt keyVal
-      case Text.take 1 $ Text.drop key txt of
-        "" -> return NullV
-        t -> return $ StringV t
+      case keyVal of
+        IntV i ->
+          case Text.take 1 $ Text.drop (fromInteger i) txt of
+            "" -> return NullV
+            t -> return $ StringV t
+        StringV key ->
+          case key of
+            "replace" -> do
+              scope <- asks scriptVars
+              return $
+                LamV
+                  scope
+                  ["needle", "replacement"]
+                  (AppE (LitE (BuiltinV ReplaceB))
+                    [ VarE "needle", VarE "replacement", LitE container ]
+                  )
+            _ -> return NullV
+        x -> throwTypeError "integer or string" x
+
+    UrlV url -> do
+      key <- asString keyVal
+      case key of
+        "protocol" ->
+          return $ maybe NullV (StringV . tshow) $ urlProtocol url
+        "host" ->
+          return $ maybe NullV StringV $ urlHostName url
+        "path" ->
+          return $ ListV . drop 1 . map StringV $ urlPath url
+        "query" ->
+          return $ maybe NullV (DictV . fmap (maybe NullV StringV) . Map.fromList) $ urlQuery url
+        "anchor" ->
+          return $ maybe NullV StringV $ urlAnchor url
+        _ -> return NullV
+
+    XmlV target -> do
+      key <- asString keyVal
+      case key of
+        "query" -> do
+          scope <- asks scriptVars
+          return $
+            LamV
+              scope
+              ["query"]
+              (AppE (LitE (BuiltinV XmlQueryB))
+                [ VarE "query", LitE container ]
+              )
+        "text" -> do
+          let node = XML.node target
+          return $ StringV $ textContent node
+        _ -> return NullV
     x -> throwTypeError "container" x
 
 nth :: [Val] -> Int -> Interpret Val
@@ -259,6 +323,8 @@ apply f args =
           DictV . mconcat <$> mapM asDict args
         StringV {} : _ ->
           StringV . mconcat <$> mapM asString args
+        UrlV {} : _ ->
+          UrlV . mconcat <$> mapM asURL args
         (x:_) -> throwTypeError "container or string" x
         
     BuiltinV MapB -> do
@@ -312,10 +378,14 @@ apply f args =
       start <- asInt =<< args `nth` 1
       size <- maybe (pure maxBound) asInt =<< args `nthMay` 2
       case container of
-        ListV xs ->
-          return $ ListV $ take size . drop start $ xs
-        StringV xs ->
-          return $ StringV $ Text.take size . Text.drop start $ xs
+        ListV xs -> do
+          let start' = if start < 0 then length xs + start else start
+              size' = if size < 0 then length xs - start' + size else size
+          return $ ListV $ take size' . drop start' $ xs
+        StringV xs -> do
+          let start' = if start < 0 then Text.length xs + start else start
+              size' = if size < 0 then Text.length xs - start' + size else size
+          return $ StringV $ Text.take size' . Text.drop start' $ xs
         x -> throwTypeError "container or string" x
 
     BuiltinV FetchB -> do
@@ -328,7 +398,7 @@ apply f args =
             Left err -> throwError err
             Right url -> return (normalizeURL url)
         x -> throwTypeError "URL or string" x
-      rootURL <- lookupVar "rootURL" >>= asURL
+      rootURL <- lookupVarDef (UrlV mempty) "rootURL" >>= asURL
       fetchHTML (renderURL $ rootURL <> actualURL)
     BuiltinV ReplaceB -> do
       needle <- args `nth` 0
@@ -347,7 +417,11 @@ apply f args =
     BuiltinV XmlQueryB -> do
       query <- asString =<< args `nth` 0
       target <- asXml =<< args `nth` 1
-      return $ ListV $ map XmlV $ jqQuery query target
+      liftIO $
+        (ListV . map XmlV <$> evaluate (jqQuery query target))
+        `catch` \(err :: SomeException) -> do
+          print err
+          return NullV
     BuiltinV XmlTextB -> do
       e <- asXml =<< args `nth` 0
       return $ StringV . textContent . XML.node $ e

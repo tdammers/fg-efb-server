@@ -32,21 +32,17 @@ instance IsString URL where
 instance Semigroup URL where
   (<>) = appendURL
 
+instance Monoid URL where
+  mempty = URL Nothing Nothing [] Nothing Nothing
+  mappend = (<>)
+
 renderURL :: URL -> Text
 renderURL url = mconcat
-  [ case urlProtocol url of
-      Nothing -> ""
-      Just proto -> renderProtocol proto
-  , case urlHostName url of
-      Nothing -> ""
-      Just host -> "//" <> host
+  [ maybe "" renderProtocol $ urlProtocol url
+  , maybe "" ("//" <>) $ urlHostName url
   , Text.intercalate "/" $ urlPath url
-  , case urlQuery url of
-      Nothing -> ""
-      Just query -> "?" <> renderQuery query
-  , case urlAnchor url of
-      Nothing -> ""
-      Just anchor -> "#" <> anchor
+  , maybe "" (("?" <>) . renderQuery) $ urlQuery url
+  , maybe "" ("#" <>) $ urlAnchor url
   ]
 
 renderProtocol :: Protocol -> Text

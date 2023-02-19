@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
+
 module Language.ScrapeScript.Parser
 where
 
@@ -60,6 +62,7 @@ nonLetExpr :: Parser Expr
 nonLetExpr =
   choice
     [ doExpr
+    , lambdaExpr
     , additiveExpr
     , return NullE
     ]
@@ -73,6 +76,17 @@ letBinding =
 letExpr :: Parser Expr
 letExpr =
   letBinding <* keyword "in" <*> expr
+
+lambdaExpr :: Parser Expr
+lambdaExpr =
+  LamE
+    <$> try
+          ( between
+              (symbol "(") (symbol ")")
+              (identifier `sepBy` symbol ",")
+            <* symbol "->"
+          )
+    <*> expr
 
 identifier :: Parser Text
 identifier =
@@ -134,7 +148,7 @@ additiveExpr :: Parser Expr
 additiveExpr = do
   lhs <- multiplicativeExpr
   xs <- many additiveTail
-  return $ foldr ($) lhs xs
+  return $ foldr ($) lhs (reverse xs)
 
 additiveTail :: Parser (Expr -> Expr)
 additiveTail =
@@ -157,7 +171,7 @@ multiplicativeExpr :: Parser Expr
 multiplicativeExpr = do
   lhs <- applicativeExpr
   xs <- many multiplicativeTail
-  return $ foldr ($) lhs xs
+  return $ foldr ($) lhs (reverse xs)
 
 multiplicativeTail :: Parser (Expr -> Expr)
 multiplicativeTail =
@@ -176,19 +190,36 @@ applicativeExpr :: Parser Expr
 applicativeExpr = do
   lhs <- primitiveExpr
   xs <- many applicativeTail
-  return $ foldr ($) lhs xs
+  return $ foldr ($) lhs (reverse xs)
 
 applicativeTail :: Parser (Expr -> Expr)
 applicativeTail =
   choice
     [ indexTail
     , applyTail
+    , dotTail
     ]
 
 indexTail :: Parser (Expr -> Expr)
 indexTail = do
-  indexE <- between (symbol "[") (symbol "]") expr
-  return $ \containerE -> AppE (LitE (BuiltinV IndexB)) [containerE, indexE]
+  between (symbol "[") (symbol "]") $ do
+    lhs <- expr
+    maybe (indexF lhs) (sliceF lhs) <$> optional (symbol ":" *> optional expr)
+  where
+    indexF lhsE containerE =
+      AppE (LitE (BuiltinV IndexB)) [containerE, lhsE]
+    sliceF lhsE (Just rhsE) containerE =
+      AppE (LitE (BuiltinV SliceB)) [containerE, lhsE, rhsE]
+    sliceF lhsE Nothing containerE =
+      AppE (LitE (BuiltinV SliceB)) [containerE, lhsE]
+
+dotTail :: Parser (Expr -> Expr)
+dotTail = do
+  key <- symbol "." *> identifier
+  return $ \containerE ->
+    AppE
+      (LitE (BuiltinV IndexB))
+      [containerE, LitE (StringV key)]
 
 applyTail :: Parser (Expr -> Expr)
 applyTail = do
