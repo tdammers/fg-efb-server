@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+
 module Language.ScrapeScript.Interpreter
 where
 
@@ -22,12 +23,10 @@ import Text.Read (readMaybe)
 import qualified Text.XML as XML
 import qualified Text.XML.Cursor as XML
 
-import FGEFB.LoadPDF
-import FGEFB.Provider
-import Language.ScrapeScript.AST
 import FGEFB.Regex
 import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
 import FGEFB.XmlUtil
+import Language.ScrapeScript.AST
 
 -- * Script Contexts
 
@@ -49,13 +48,47 @@ scLookupVar :: Text -> ScriptContext -> Maybe Val
 scLookupVar name ctx =
   Map.lookup name (scriptVars ctx)
 
+defVars :: Map Text Val
+defVars = Map.fromList
+  [ ("ident", BuiltinV IdentB)
+  ---- Arithmetic ----
+  , ("sum", BuiltinV SumB)
+  , ("product", BuiltinV ProductB)
+  , ("diff", BuiltinV DiffB)
+  , ("quotient", BuiltinV QuotientB)
+
+  ---- Coercions ----
+  , ("toString", BuiltinV ToStringB)
+  , ("toBool", BuiltinV ToBoolB)
+  , ("toInt", BuiltinV ToIntB)
+
+  ---- Collections (strings, lists, dictionaries) ----
+  , ("concat", BuiltinV ConcatB)
+  , ("replace", BuiltinV ReplaceB)
+  , ("map", BuiltinV MapB)
+  , ("fold", BuiltinV FoldB)
+  , ("index", BuiltinV IndexB)
+  , ("slice", BuiltinV SliceB)
+  , ("keys", BuiltinV KeysB)
+  , ("elems", BuiltinV ElemsB)
+
+  ---- HTTP ----
+  , ("fetch", BuiltinV FetchB)
+  , ("parseUrl", BuiltinV ParseUrlB)
+
+  ---- DOM ----
+  , ("xmlQuery", BuiltinV XmlQueryB)
+  , ("xmlText", BuiltinV XmlTextB)
+  , ("xmlAttrib", BuiltinV XmlAttribB)
+  ]
+
 -- * The Interpreter Monad
 
 type Interpret = ExceptT String (ReaderT ScriptContext IO)
 
 runInterpret :: Map Text Val -> Interpret a -> IO (Either String a)
 runInterpret initialVars a = do
-  let ctx = ScriptContext initialVars
+  let ctx = ScriptContext (initialVars <> defVars)
   runReaderT (runExceptT a) ctx
 
 throwTypeError :: String -> Val -> Interpret a
@@ -128,11 +161,11 @@ lookupMember keyVal container =
     ListV items -> do
       key <- asInt keyVal
       case drop key items of
-        (x:xs) -> return x
+        (x:_) -> return x
         _ -> return NullV
     StringV txt -> do
       key <- asInt keyVal
-      case Text.drop key txt of
+      case Text.take 1 $ Text.drop key txt of
         "" -> return NullV
         t -> return $ StringV t
     x -> throwTypeError "container" x
@@ -207,15 +240,24 @@ apply f args =
       case operands of
         [] -> return $ IntV 1
         x:xs -> return $ IntV $ x `div` product xs
+    BuiltinV ToStringB -> do
+      arg <- args `nth` 0
+      return $ StringV $ stringify arg
+    BuiltinV ToBoolB -> do
+      arg <- args `nth` 0
+      return $ BoolV $ truthy arg
+    BuiltinV ToIntB -> do
+      arg <- args `nth` 0
+      maybe NullV IntV . readMaybe . Text.unpack <$> asString arg
 
     BuiltinV ConcatB -> do
       case args of
         [] -> return NullV
-        ListV x : _ ->
+        ListV {} : _ ->
           ListV . concat <$> mapM asList args
-        DictV x : _ ->
+        DictV {} : _ ->
           DictV . mconcat <$> mapM asDict args
-        StringV x : _ ->
+        StringV {} : _ ->
           StringV . mconcat <$> mapM asString args
         (x:_) -> throwTypeError "container or string" x
         
@@ -237,7 +279,7 @@ apply f args =
         NullV ->
           return NullV
         ListV (x:xs) ->
-          foldM (\x y -> apply f' [x, y]) x xs
+          foldM (\a b -> apply f' [a, b]) x xs
         ListV [] ->
           return $ ListV []
         x -> throwTypeError "list" x
@@ -372,8 +414,8 @@ fetchHTML url =
         parseMetaRefresh content =
           let parts = map Text.strip $ Text.splitOn ";" content
           in case parts of
-            (_ : url : _) ->
-              if "url=" `Text.isPrefixOf` url then
+            (_ : redirectUrl : _) ->
+              if "url=" `Text.isPrefixOf` redirectUrl then
                 Just $ Text.drop 4 url
               else
                 Nothing

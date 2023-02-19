@@ -6,48 +6,19 @@
 module FGEFB.Providers.ScriptedHtmlScrapingProvider
 where
 
-import Control.Monad (when, forM)
 import Control.Monad.Except
-import Control.Monad.State
-import Data.Aeson ( (.:), (.:?), (.!=) )
-import qualified Data.Aeson as JSON
-import qualified Data.Aeson.TH as JSON
-import qualified Data.ByteString.Lazy as LBS
-import Data.List (foldl', sortOn)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (catMaybes, listToMaybe, maybeToList, fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Text.Encoding (decodeUtf8)
-import qualified Data.Text.Lazy as LText
-import Data.Time
-import qualified Data.Vector as Vector
-import Debug.Trace (trace, traceShow, traceM, traceShowM)
-import Network.HTTP.Base (urlEncode, urlDecode)
-import qualified Network.HTTP.Conduit as HTTP
-import Network.HTTP.Simple (httpJSON, httpBS)
-import qualified Network.HTTP.Simple as HTTP
-import qualified Network.HTTP.Types as HTTP
-import System.FilePath (takeBaseName, dropExtension, (</>), (<.>))
-import Text.Casing as Casing
-import qualified Text.HTML.DOM as HTML
-import Text.Printf (printf)
-import Text.Read (readMaybe)
-import qualified Text.XML as XML
-import qualified Text.XML.Cursor as XML
-import qualified Text.XML.Selectors as XML
-import qualified Text.XML.Selectors.Parsers.JQ as XML
+import Network.HTTP.Base (urlDecode)
 
 import Language.ScrapeScript.AST
 import Language.ScrapeScript.Interpreter
 
 import FGEFB.LoadPDF
 import FGEFB.Provider
-import FGEFB.Regex
-import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
-import FGEFB.Util
-
+import FGEFB.URL (renderURL, parseURL, URL (..))
 
 scriptedHtmlScrapingProvider :: ProviderContext
                      -> Maybe Text

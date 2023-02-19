@@ -96,7 +96,7 @@ convertPdfPage path page output = do
              , output
              ]
   putStrLn $ Process.showCommandForUser magick args
-  (exitCode, out, err) <-
+  (exitCode, _out, err) <-
       Process.readProcessWithExitCode magick args ""
   case exitCode of
     ExitSuccess -> do
@@ -105,5 +105,6 @@ convertPdfPage path page output = do
       putStrLn err
       return False
     ExitFailure e -> do
+      putStrLn $ "PDF conversion exited with error " <> show e
       putStrLn err
       error "Something bad happened."

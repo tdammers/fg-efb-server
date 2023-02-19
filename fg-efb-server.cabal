@@ -34,6 +34,8 @@ executable fg-efb-server
     FGEFB.Providers.NavaidJsonProvider
     FGEFB.Providers.ScriptedHtmlScrapingProvider
     FGEFB.Regex
+    FGEFB.REPL
+    FGEFB.Server
     FGEFB.URL
     FGEFB.Util
     FGEFB.XmlUtil
@@ -55,6 +57,7 @@ executable fg-efb-server
                , file-embed >=0.0.13.0 && <0.1
                , filepath >=1.4.2.1 && <1.5
                , hashable >=1.3.0 && <1.5
+               , haskeline >=0.8.2 && <0.9
                , html-conduit >=1.3.2.1 && <1.4
                , HTTP >=4000.3 && <4001
                , http-types >=0.12.3 && <0.13

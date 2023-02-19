@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module FGEFB.Providers
 where
 
@@ -9,10 +11,11 @@ import FGEFB.Providers.NavaidJsonProvider
 import FGEFB.Providers.HtmlScrapingProvider
 import FGEFB.Providers.ScriptedHtmlScrapingProvider
 
+import Language.ScrapeScript.Parser
+
 import qualified Data.Aeson as JSON
-import Data.Aeson ( (.:), (.:?), (.!=) )
+import Data.Aeson ( (.:), (.!=) )
 import Data.Text (Text)
-import qualified Data.Text as Text
 
 newtype ProviderFactory =
   ProviderFactory
@@ -37,10 +40,17 @@ instance JSON.FromJSON ProviderFactory where
             documentSel <- obj .: "documents"
             return . ProviderFactory $ \context -> 
               htmlScrapingProvider context label root landing folderSel documentSel
-          -- "html-scripted" -> do
-          --   root <- obj .: "url"
-          --   return . ProviderFactory $ \context ->
-          --     scriptedHtmlScrapingProvider context label root
+          "html-scripted" -> do
+            root <- obj .: "url"
+            folderListExpr <- obj .: "folders" >>= parseExprM ""
+            docListExpr <- obj .: "documents" >>= parseExprM ""
+            docUrlExpr <- obj .: "document" >>= parseExprM ""
+            return . ProviderFactory $ \context ->
+              scriptedHtmlScrapingProvider
+                context label root
+                folderListExpr
+                docListExpr
+                docUrlExpr
 
           "group" -> do
             subFactories <- obj .: "providers"

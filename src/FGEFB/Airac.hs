@@ -3,7 +3,6 @@ module FGEFB.Airac
 where
 
 import Data.Time
-import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Aeson.TH
 import Data.Text (Text)
 import qualified Data.Text as Text

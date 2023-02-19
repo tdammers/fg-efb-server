@@ -2,15 +2,14 @@
 module FGEFB.Provider
 where
 
-import Data.Text (Text)
-import System.FilePath (FilePath)
+import qualified Data.Aeson as JSON
+import Data.Bool (bool)
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.HashMap.Strict as HashMap
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Aeson as JSON
+import Data.Text (Text)
 import qualified Data.Vector as Vector
-import Data.Bool (bool)
 
 import FGEFB.Util (tshow)
 
@@ -34,8 +33,15 @@ unpackVar prefix (k, v) = do
     JSON.Number n -> return (pk, tshow n)
     JSON.Null -> return (pk, "")
     JSON.Bool b -> return (pk, bool "no" "yes" b)
+    JSON.Array xs -> do
+      let items = Vector.toList xs
+      concatMap
+        (\(k', v') -> unpackVar "" (pk <> "[" <> k' <> "]", v'))
+        (zip (map tshow [0 :: Int ..]) items)
     JSON.Object {} -> do
-      let JSON.Success o = JSON.fromJSON v
+      o <- case JSON.fromJSON v of
+        JSON.Success o -> return o
+        x -> error (show x)
       unpackVarList (pk <> ".") (HashMap.toList o)
 
 defProviderContext :: ProviderContext

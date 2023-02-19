@@ -3,14 +3,10 @@
 module FGEFB.Util
 where
 
+import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
-import Data.List (foldl')
-
-import qualified System.FilePath as FilePath
-
-
 
 tshow :: Show a => a -> Text
 tshow = Text.pack . show

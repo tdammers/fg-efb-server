@@ -5,35 +5,24 @@
 module FGEFB.Providers.HtmlScrapingProvider
 where
 
-import Control.Monad (when, forM)
 import Data.Aeson ( (.:), (.:?), (.!=) )
 import qualified Data.Aeson as JSON
-import qualified Data.Aeson.TH as JSON
-import qualified Data.ByteString.Lazy as LBS
 import Data.List (foldl', sortOn)
-import qualified Data.Map as Map
-import Data.Maybe (catMaybes, listToMaybe, maybeToList, fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
-import qualified Data.Text.Lazy as LText
-import Data.Time
 import qualified Data.Vector as Vector
-import Debug.Trace (trace, traceShow, traceM, traceShowM)
 import Network.HTTP.Base (urlEncode, urlDecode)
 import qualified Network.HTTP.Conduit as HTTP
-import Network.HTTP.Simple (httpJSON, httpBS)
 import qualified Network.HTTP.Simple as HTTP
 import qualified Network.HTTP.Types as HTTP
-import System.FilePath (takeBaseName, dropExtension, (</>), (<.>))
+import System.FilePath (takeBaseName)
 import Text.Casing as Casing
 import qualified Text.HTML.DOM as HTML
 import Text.Printf (printf)
-import Text.Read (readMaybe)
 import qualified Text.XML as XML
 import qualified Text.XML.Cursor as XML
-import qualified Text.XML.Selectors as XML
-import qualified Text.XML.Selectors.Parsers.JQ as XML
 
 import FGEFB.LoadPDF
 import FGEFB.Provider
@@ -70,19 +59,17 @@ instance JSON.FromJSON Extraction where
       goObj obj = do
         mselector <- obj .:? "child"
         mattrib <- fmap uqName <$> (obj .:? "attrib")
-        let target = case mattrib of
-                        Nothing -> ExtractText
-                        Just a -> ExtractAttribute a
+        let target = maybe ExtractText ExtractAttribute mattrib
         return $ Extraction mselector target
 
 extract :: Extraction -> XML.Cursor -> [Text]
 extract e root = do
-  elem <- (maybe (:[]) jqQuery (extractionSelector e)) root
+  xmlElem <- maybe (:[]) jqQuery (extractionSelector e) root
   case extractionTarget e of
     ExtractText ->
-      return . textContent . XML.node $ elem
+      return . textContent . XML.node $ xmlElem
     ExtractAttribute n ->
-      XML.attribute n elem
+      XML.attribute n xmlElem
 
 data LabelFormat
   = LabelIdentity
@@ -169,14 +156,14 @@ matchPatternContext url' pattern' =
                   pattern'
 
 instance JSON.FromJSON LinkSpec where
-  parseJSON j = JSON.withObject "LinkSpec" goObj j
+  parseJSON = JSON.withObject "LinkSpec" goObj
     where
       goObj obj = do
         LinkSpec
           <$> obj .: "select"
-          <*> obj .:? "href" .!= (Extraction Nothing (ExtractAttribute "href"))
+          <*> obj .:? "href" .!= Extraction Nothing (ExtractAttribute "href")
           <*> obj .:? "href-format" .!= LabelIdentity
-          <*> obj .:? "label" .!= (Extraction Nothing ExtractText)
+          <*> obj .:? "label" .!= Extraction Nothing ExtractText
           <*> obj .:? "format" .!= LabelIdentity
           <*> obj .:? "auto-follow" .!= False
           <*> obj .:? "context"
@@ -186,18 +173,18 @@ instance JSON.FromJSON LinkSpec where
 extractLinks :: URL -> LinkSpec -> XML.Cursor -> [(Text, URL, Bool)]
 extractLinks currentURL spec root = applySorting $ do
   sel <- Text.strip <$> Text.splitOn "," (replaceVars $ elemSelector spec)
-  elem <- jqQuery sel root
-  let labelRaw = Text.unwords $ extract (replaceVars <$> linkLabelExtraction spec) elem
-  let label = formatLabel (linkLabelFormat spec) labelRaw
+  xmlElem <- jqQuery sel root
+  let labelRaw = Text.unwords $ extract (replaceVars <$> linkLabelExtraction spec) xmlElem
+  let labelFormatted = formatLabel (linkLabelFormat spec) labelRaw
 
   let keep = case linkFilter spec of
                 Nothing -> True
-                Just re -> reTest re label
+                Just re -> reTest re labelFormatted
   if keep then do
-    hrefRaw <- extract (replaceVars <$> linkHrefExtraction spec) elem
+    hrefRaw <- extract (replaceVars <$> linkHrefExtraction spec) xmlElem
     let href = formatLabel (linkHrefFormat spec) hrefRaw
     url <- either (const []) return $ parseURL href
-    return (label, url, linkAutoFollow spec)
+    return (labelFormatted, url, linkAutoFollow spec)
   else do
     []
   where
@@ -206,7 +193,7 @@ extractLinks currentURL spec root = applySorting $ do
     applySorting =
       case linkSort spec of
         SortLinkNone -> id
-        SortLinkByLabel -> sortOn (\(label, _, _) -> label)
+        SortLinkByLabel -> sortOn (\(l, _, _) -> l)
         
 
 htmlScrapingProvider :: ProviderContext
@@ -269,9 +256,9 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
       rootURL = either error id $ parseURL rootUrlStr
 
       makeLink :: Bool -> URL -> (Text, URL, Bool) -> FileInfo
-      makeLink isDir currentURL (label, linkUrl, _) =
+      makeLink isDir currentURL (linkLabel, linkUrl, _) =
         FileInfo
-           { fileName = Text.unwords . Text.words $ label
+           { fileName = Text.unwords . Text.words $ linkLabel
            , filePath = path
            , fileType = if isDir then Directory else PDFFile
            }
@@ -291,10 +278,10 @@ fetchListing :: Text -> IO (Text, XML.Document)
 fetchListing url = go url 12
   where
     go :: Text -> Int -> IO (Text, XML.Document)
-    go url 0 = error "Maximum redirect count exceeded"
-    go url n = do
+    go _ 0 = error "Maximum redirect count exceeded"
+    go currentUrl n = do
       printf "HTTP GET %s\n" url
-      rq <- HTTP.parseRequest (Text.unpack url)
+      rq <- HTTP.parseRequest (Text.unpack currentUrl)
       rp <- HTTP.httpLBS rq { HTTP.redirectCount = 0 }
       printf "HTTP %i %s\n"
         (HTTP.getResponseStatusCode rp)
@@ -306,45 +293,46 @@ fetchListing url = go url 12
             error "Missing location header"
           Just location -> do
             printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
-            let url' = renderURL $
-                        either error id (parseURL url) <>
+            let redirectUrl = renderURL $
+                        either error id (parseURL currentUrl) <>
                         either error id (parseURL (decodeUtf8 location))
-            if url' == url then
+            if redirectUrl == currentUrl then
               error "Infinite redirection"
             else do
-              go url' (n - 1)
+              go currentUrl (n - 1)
       else do
         let document = HTML.parseLBS . HTTP.getResponseBody $ rp
             metaRefresh =
-              map (combineURLs url) .
+              map (combineURLs currentUrl) .
               catMaybes .
               map (parseMetaRefresh . mconcat . XML.attribute "content") .
               jqQuery ("meta[http-equiv=Refresh]" :: Text) .
               XML.fromDocument $
               document
         case metaRefresh of
-          url':_ -> do
-            printf "Redirecting due to meta refresh: %s\n" url'
-            if url' == url then
+          redirectUrl:_ -> do
+            printf "Redirecting due to meta refresh: %s\n" redirectUrl
+            if redirectUrl == currentUrl then
               error "Infinite redirection"
             else
-              go url' (n - 1)
+              go redirectUrl (n - 1)
           [] -> do
-            return $ (url, document)
+            return $ (currentUrl, document)
       where
         redirectCodes = [301, 302, 303, 307, 308]
         parseMetaRefresh :: Text -> Maybe Text
         parseMetaRefresh content =
           let parts = map Text.strip $ Text.splitOn ";" content
           in case parts of
-            (_ : url : _) ->
-              if "url=" `Text.isPrefixOf` url then
-                Just $ Text.drop 4 url
+            (_ : redirectUrl : _) ->
+              if "url=" `Text.isPrefixOf` redirectUrl then
+                Just $ Text.drop 4 redirectUrl
               else
                 Nothing
             _ ->
               Nothing
 
+for :: [a] -> (a -> b) -> [b]
 for = flip map
 
 combineURLs :: Text -> Text -> Text

@@ -24,3 +24,23 @@ textContent :: XML.Node -> Text
 textContent (XML.NodeContent t) = t
 textContent (XML.NodeElement (XML.Element _ _ children)) = mconcat . map textContent $ children
 textContent _ = ""
+
+xmlFragmentToDocument :: XML.Element -> XML.Document
+xmlFragmentToDocument docroot =
+  XML.Document
+    { XML.documentPrologue = prologue
+    , XML.documentEpilogue = []
+    , XML.documentRoot = docroot
+    }
+    where
+      prologue =
+        XML.Prologue
+          [ XML.MiscInstruction
+              XML.Instruction
+                { XML.instructionTarget = "xml-stylesheet"
+                , XML.instructionData = "type=\"text/xml\" href=\"/static/style.xsl\""
+                }
+          ]
+          Nothing
+          []
+

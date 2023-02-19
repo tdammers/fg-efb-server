@@ -3,19 +3,18 @@
 module FGEFB.Regex
 where
 
-import qualified Text.Regex.TDFA as Regex
-import Text.Regex.TDFA ( Regex, (=~), MatchOffset, MatchLength, matchAll, MatchResult (..), MatchArray (..) )
-import qualified Data.Text as Text
-import Data.Text (Text)
-import Debug.Trace
+import Control.Applicative ( (<|>), many )
+import Control.Monad (void)
 import Data.Array ((!))
 import qualified Data.Array as Array
+import Data.Char (isDigit)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Data.Void (Void)
 import qualified Text.Megaparsec as Parsec
 import qualified Text.Megaparsec.Char as Parsec
-import Control.Applicative ( (<|>), many )
-import Data.Void (Void)
-import Data.Char (isDigit)
-import Text.Printf
+import Text.Regex.TDFA ( Regex, (=~), MatchOffset, matchAll, MatchArray )
+import qualified Text.Regex.TDFA as Regex
 
 data Replacement
   = ReplacementLiteral Text
@@ -37,7 +36,7 @@ replacementP = backrefSimpleP <|> escapedP <|> literalP
 
 backrefSimpleP :: Parsec.Parsec Void Text Replacement
 backrefSimpleP = do
-  Parsec.char '$'
+  void $ Parsec.char '$'
   ReplacementBackref . read . Text.unpack <$> Parsec.takeWhile1P (Just "integer") isDigit
 
 literalP :: Parsec.Parsec Void Text Replacement
@@ -46,14 +45,14 @@ literalP =
 
 escapedP :: Parsec.Parsec Void Text Replacement
 escapedP = do
-  Parsec.char '\\'
+  void $ Parsec.char '\\'
   ReplacementLiteral <$> Parsec.takeP Nothing 1
 
 applyReplacements :: Text -> MatchArray -> Replacements -> Text
 applyReplacements src ma = mconcat . map (applyReplacement src ma)
 
 applyReplacement :: Text -> MatchArray -> Replacement -> Text
-applyReplacement src ma (ReplacementLiteral t) = t
+applyReplacement _ _ (ReplacementLiteral t) = t
 applyReplacement src ma (ReplacementBackref n) = 
   let (ofs, len) = ma ! n
   in Text.take len . Text.drop ofs $ src

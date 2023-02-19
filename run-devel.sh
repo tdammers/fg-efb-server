@@ -1,6 +1,6 @@
 PDFCACHE=./cache \
     ghcid \
-    --test Main.runServer \
+    --test Main.main \
     --reload=providers.yaml \
     --restart=fg-efb-server.cabal \
     --restart=cabal.project \

@@ -2,9 +2,9 @@
 module FGEFB.URL
 where
 
+import Data.String (IsString (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.String (IsString (..))
 
 data Protocol
   = HTTP
@@ -94,23 +94,23 @@ parseURL str
 
 parseOtherURL :: Text -> Either String URL
 parseOtherURL str = do
-  let (protoStr, rem) = Text.breakOn ":" str
-  if Text.null rem then do
+  let (protoStr, rest) = Text.breakOn ":" str
+  if Text.null rest then do
     parseHostRelativeURL str
   else do
     proto <- case protoStr of
       "http" -> return HTTP
       "https" -> return HTTPS
       x -> Left $ "Unknown protocol " ++ show x
-    url <- parseProtocolRelativeURL (Text.drop 1 rem)
+    url <- parseProtocolRelativeURL (Text.drop 1 rest)
     return $ url { urlProtocol = Just proto }
 
 parseProtocolRelativeURL :: Text -> Either String URL
 parseProtocolRelativeURL str
   | "//" `Text.isPrefixOf` str
   = do
-      let (host, rem) = Text.break (`elem` ['/', '?']) $ Text.drop 2 str
-      url <- parseHostRelativeURL rem
+      let (host, rest) = Text.break (`elem` ['/', '?']) $ Text.drop 2 str
+      url <- parseHostRelativeURL rest
       return $ url { urlHostName = Just host }
   | otherwise
   = Left $ "Not a protocol-relative URL: " ++ show str
@@ -140,8 +140,8 @@ parseQuery str =
 
 parseQueryItem :: Text -> (Text, Maybe Text)
 parseQueryItem str =
-  let (key, rem) = Text.breakOn "=" str
-  in (key, if Text.null rem then Nothing else Just (Text.drop 1 rem))
+  let (key, rest) = Text.breakOn "=" str
+  in (key, if Text.null rest then Nothing else Just (Text.drop 1 rest))
 
 normalizeURL :: URL -> URL
 normalizeURL url = url { urlPath = normalizePath (urlPath url) }
@@ -149,5 +149,5 @@ normalizeURL url = url { urlPath = normalizePath (urlPath url) }
 normalizePath :: Path -> Path
 normalizePath [] = []
 normalizePath (".":xs) = normalizePath xs
-normalizePath (x:"..":xs) = normalizePath xs
+normalizePath (_:"..":xs) = normalizePath xs
 normalizePath (x:xs) = x : normalizePath xs
