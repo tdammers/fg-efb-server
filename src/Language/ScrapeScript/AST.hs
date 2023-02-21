@@ -26,7 +26,7 @@ data Expr a
   | LamE a [Text] (Expr a)
   | AppE a (Expr a) [Expr a]
   | DoE a ![Expr a]
-  | LetE a !Text !(Expr a) !(Expr a)
+  | LetE a !(Pat a) !(Expr a) !(Expr a)
   | ListE a ![Expr a]
   | DictE a ![(Expr a, Expr a)]
   | CaseE a !(Expr a) ![(Pat a, [Expr a], Expr a)]

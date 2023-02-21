@@ -37,6 +37,15 @@ symbol = void . L.symbol whitespace
 keyword :: Text -> Parser ()
 keyword kw = void . try $ string kw <* notFollowedBy (satisfy isIdent) <* whitespace
 
+parentheses :: Parser a -> Parser a
+parentheses = between (symbol "(") (symbol ")")
+
+brackets :: Parser a -> Parser a
+brackets = between (symbol "[") (symbol "]")
+
+braces :: Parser a -> Parser a
+braces = between (symbol "{") (symbol "}")
+
 val :: Parser (Val SourcePos)
 val = choice
   [ NullV <$ keyword "null"
@@ -70,20 +79,19 @@ letBinding :: Parser (Expr SourcePos -> Expr SourcePos)
 letBinding =
   LetE
     <$> getSourcePos
-    <*> try (identifier <* whitespace <* symbol "=")
+    <*> try (pat <* whitespace <* symbol "<-")
     <*> expr
 
 letExpr :: Parser (Expr SourcePos)
 letExpr =
-  letBinding <* keyword "in" <*> expr
+  letBinding <* optional (keyword "in") <*> expr
 
 lambdaExpr :: Parser (Expr SourcePos)
 lambdaExpr =
   LamE
     <$> getSourcePos
     <*> try
-          ( between
-              (symbol "(") (symbol ")")
+          ( parentheses
               (identifier `sepBy` symbol ",")
             <* symbol "->"
           )
@@ -103,26 +111,26 @@ listExpr :: Parser (Expr SourcePos)
 listExpr =
   ListE
     <$> getSourcePos
-    <*> between (symbol "[") (symbol "]") (expr `sepBy` symbol ",")
+    <*> brackets (expr `sepBy` symbol ",")
 
 dictExpr :: Parser (Expr SourcePos)
 dictExpr =
   DictE
     <$> getSourcePos
-    <*> between (symbol "{") (symbol "}") (pair `sepBy` symbol ",")
+    <*> braces (pair `sepBy` symbol ",")
   where
     pair :: Parser (Expr SourcePos, Expr SourcePos)
     pair = (,) <$> expr <* symbol ":" <*> expr
 
 groupExpr :: Parser (Expr SourcePos)
-groupExpr = between (symbol "(") (symbol ")") expr
+groupExpr = parentheses expr
 
 caseExpr :: Parser (Expr SourcePos)
 caseExpr = do
   p <- getSourcePos
   keyword "case"
-  scrutinee <- between (symbol "(") (symbol ")") expr
-  branches <- between (symbol "{") (symbol "}") (caseBranch `sepBy` symbol ";")
+  scrutinee <- parentheses expr
+  branches <- braces (caseBranch `sepBy` symbol ";")
   return $ CaseE p scrutinee branches
 
 caseBranch :: Parser (Pat SourcePos, [Expr SourcePos], Expr SourcePos)
@@ -137,7 +145,7 @@ pat :: Parser (Pat SourcePos)
 pat = choice
   [ LitP <$> getSourcePos <*> val
   , BindP <$> getSourcePos <*> identifier <* whitespace
-  , between (symbol "(") (symbol ")") pat
+  , parentheses pat
   , listPat
   ]
 
@@ -155,7 +163,7 @@ doExpr :: Parser (Expr SourcePos)
 doExpr = do
   p <- getSourcePos
   keyword "do"
-  parts <- between (symbol "{") (symbol "}") (doPart `sepBy` symbol ";")
+  parts <- braces (doPart `sepBy` symbol ";")
   return $ foldDoParts p parts
 
 data DoPart
@@ -243,7 +251,7 @@ applicativeTail =
 indexTail :: Parser (Expr SourcePos -> Expr SourcePos)
 indexTail = do
   p <- getSourcePos
-  between (symbol "[") (symbol "]") $ do
+  brackets $ do
     lhs <- expr
     maybe (indexF p lhs) (sliceF p lhs) <$> optional (symbol ":" *> optional expr)
   where
@@ -266,7 +274,7 @@ dotTail = do
 applyTail :: Parser (Expr SourcePos -> Expr SourcePos)
 applyTail = do
   p <- getSourcePos
-  args <- between (symbol "(") (symbol ")") (expr `sepBy` symbol ",")
+  args <- parentheses (expr `sepBy` symbol ",")
   return $ \e -> AppE p e args
 
 primitiveExpr :: Parser (Expr SourcePos)
@@ -274,6 +282,6 @@ primitiveExpr = choice
   [ LitE <$> getSourcePos <*> val
   , VarE <$> getSourcePos <*> identifier <* whitespace
   , groupExpr
-  , listExpr
   , dictExpr
+  , listExpr
   ]

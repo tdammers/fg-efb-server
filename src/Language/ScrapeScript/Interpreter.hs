@@ -322,9 +322,11 @@ eval (NullE _p) = return NullV
 eval (DoE _p []) = return NullV
 eval (DoE p [x]) = atPos p $ eval x
 eval (DoE p (x:xs)) = atPos p $ eval x >> eval (DoE p xs)
-eval (LetE p name e body) = atPos p $ do
+eval (LetE p pat e body) = atPos p $ do
   val <- eval e
-  withVar name val $ eval body
+  case patMatch val pat of
+    Nothing -> throwRuntimeError $ "Pattern match failed for " ++ Text.unpack (stringify val)
+    Just vars -> withVars vars $ eval body
 eval (LitE _p val) = return val
 eval (VarE p name) = atPos p $ lookupVar name
 eval (ListE p es) =
