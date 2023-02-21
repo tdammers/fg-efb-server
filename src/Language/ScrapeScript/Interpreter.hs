@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Language.ScrapeScript.Interpreter
 where
@@ -242,9 +243,9 @@ lookupMember keyVal container =
               return $
                 LamV
                   scope
-                  ["needle", "replacement"]
+                  (p <$ listP ["needle", "replacement"])
                   (AppE p (LitE p (BuiltinV ReplaceB))
-                    [ VarE p "needle", VarE p "replacement", LitE p container ]
+                    (ListE p [ VarE p "needle", VarE p "replacement", LitE p container ])
                   )
             _ -> return NullV
         x -> throwTypeError "integer or string" x
@@ -278,9 +279,9 @@ lookupMember keyVal container =
           return $
             LamV
               scope
-              ["query"]
+              (p <$ listP ["query"])
               (AppE p (LitE p (BuiltinV XmlQueryB))
-                [ VarE p "query", LitE p container ]
+                (ListE p [ VarE p "query", LitE p container ])
               )
         "attr" -> do
           scope <- asks scriptVars
@@ -288,9 +289,9 @@ lookupMember keyVal container =
           return $
             LamV
               scope
-              ["attrName"]
+              (p <$ listP ["attrName"])
               (AppE p (LitE p (BuiltinV XmlAttribB))
-                [ LitE p container, VarE p "attrName" ]
+                (ListE p [ LitE p container, VarE p "attrName" ])
               )
         "text" -> do
           return $ StringV $ textContent target
@@ -324,9 +325,7 @@ eval (DoE p [x]) = atPos p $ eval x
 eval (DoE p (x:xs)) = atPos p $ eval x >> eval (DoE p xs)
 eval (LetE p pat e body) = atPos p $ do
   val <- eval e
-  case patMatch val pat of
-    Nothing -> throwRuntimeError $ "Pattern match failed for " ++ Text.unpack (stringify val)
-    Just vars -> withVars vars $ eval body
+  withPatMatch val pat (eval body)
 eval (LitE _p val) = return val
 eval (VarE p name) = atPos p $ lookupVar name
 eval (ListE p es) =
@@ -335,13 +334,13 @@ eval (ListE p es) =
 eval (DictE p pairs) = atPos p $ do
   dictV <$>
     mapM (\(k, v) -> (,) <$> (eval k >>= asString) <*> eval v) pairs
-eval (LamE p argNames body) = atPos p $ do
+eval (LamE p argsPat body) = atPos p $ do
   closure <- getVars
-  return $ LamV closure argNames body
-eval (AppE p fE argEs) = atPos p $ do
+  return $ LamV closure argsPat body
+eval (AppE p fE argE) = atPos p $ do
   f <- eval fE
-  args <- mapM eval argEs
-  apply f args
+  arg <- eval argE
+  apply f arg
 eval (CaseE p scrutineeE branches) = atPos p $ do
   scrutinee <- eval scrutineeE
   evalPatMatches scrutinee branches
@@ -398,48 +397,52 @@ patMatch (DictV valMap) (DictP _ patItems) =
 patMatch _ _ =
   Nothing
 
-apply :: Val p -> [Val p] -> Interpret p (Val p)
-apply f args =
+withPatMatch :: Val p -> Pat p -> Interpret p a -> Interpret p a
+withPatMatch val pat body =
+  case patMatch val pat of
+    Nothing -> throwRuntimeError $ "Pattern match failed for " ++ Text.unpack (stringify val)
+    Just vars -> withVars vars body
+
+apply :: Val p -> Val p -> Interpret p (Val p)
+apply f arg =
   case f of
-    LamV closure argNames body ->
+    LamV closure argPat body ->
       withVars closure $
-      withVars (Map.fromList $ zip argNames args) $
+      withPatMatch arg argPat $ 
       eval body
 
     BuiltinV IdentB ->
-      args `nth` 0
+      return arg
 
     BuiltinV DebugLogB -> do
-      liftIO $ Text.putStrLn . Text.intercalate ", " . map stringify $ args
-      args `nth` 0
+      liftIO $ Text.putStrLn . stringify $ arg
+      return arg
 
     BuiltinV SumB -> do
-      operands <- mapM asInteger args
+      operands <- mapM asInteger =<< asList arg
       return $ IntV $ sum operands
     BuiltinV DiffB -> do
-      operands <- mapM asInteger args
+      operands <- mapM asInteger =<< asList arg
       case operands of
         [] -> return $ IntV 0
         x:xs -> return $ IntV $ x - sum xs
     BuiltinV ProductB -> do
-      operands <- mapM asInteger args
+      operands <- mapM asInteger =<< asList arg
       return $ IntV $ product operands
     BuiltinV QuotientB -> do
-      operands <- mapM asInteger args
+      operands <- mapM asInteger =<< asList arg
       case operands of
         [] -> return $ IntV 1
         x:xs -> return $ IntV $ x `div` product xs
     BuiltinV ToStringB -> do
-      arg <- args `nth` 0
       return $ StringV $ stringify arg
     BuiltinV ToBoolB -> do
-      arg <- args `nth` 0
       return $ BoolV $ truthy arg
     BuiltinV ToIntB -> do
-      arg <- args `nth` 0
       maybe NullV IntV . readMaybe . Text.unpack <$> asString arg
 
     BuiltinV ConcatB -> do
+      args <- asList arg
       case args of
         [] -> return NullV
         ListV {} : _ ->
@@ -453,29 +456,32 @@ apply f args =
         (x:_) -> throwTypeError "container or string" x
         
     BuiltinV MapB -> do
+      args <- asList arg
       f' <- args `nth` 0
       container <- args `nth` 1
       case container of
         NullV -> return NullV
         ListV xs ->
-          ListV <$> mapM (apply f' . (:[])) xs
+          ListV <$> mapM (apply f' . ListV . (:[])) xs
         DictV m ->
-          dictV <$> mapM (\(k, v) -> (k ,) <$> apply f' [v]) (Map.toList m)
+          dictV <$> mapM (\(k, v) -> (k ,) <$> apply f' (ListV [v])) (Map.toList m)
         x -> throwTypeError "container" x
 
     BuiltinV FoldB -> do
+      args <- asList arg
       f' <- args `nth` 0
       container <- args `nth` 1
       case container of
         NullV ->
           return NullV
         ListV (x:xs) ->
-          foldM (\a b -> apply f' [a, b]) x xs
+          foldM (\a b -> apply f' (ListV [a, b])) x xs
         ListV [] ->
           return $ ListV []
         x -> throwTypeError "list" x
 
     BuiltinV KeysB -> do
+      args <- asList arg
       container <- args `nth` 0
       case container of
         ListV xs ->
@@ -485,6 +491,7 @@ apply f args =
         x -> throwTypeError "container" x
 
     BuiltinV ElemsB -> do
+      args <- asList arg
       container <- args `nth` 0
       case container of
         ListV xs ->
@@ -494,11 +501,13 @@ apply f args =
         x -> throwTypeError "container" x
 
     BuiltinV IndexB -> do
+      args <- asList arg
       container <- args `nth` 0
       index <- args `nth` 1
       lookupMember index container
 
     BuiltinV SliceB -> do
+      args <- asList arg
       container <- args `nth` 0
       start <- asInt =<< args `nth` 1
       size <- maybe (pure maxBound) asInt =<< args `nthMay` 2
@@ -514,6 +523,7 @@ apply f args =
         x -> throwTypeError "container or string" x
 
     BuiltinV HttpGetB -> do
+      args <- asList arg
       urlVal <- args `nth` 0
       actualURL <- case urlVal of
         UrlV url ->
@@ -526,6 +536,7 @@ apply f args =
       rootURL <- lookupVarDef (UrlV mempty) "rootURL" >>= asURL
       fetchHTML (renderURL $ rootURL <> actualURL)
     BuiltinV ReplaceB -> do
+      args <- asList arg
       needle <- args `nth` 0
       replacement <- asString =<< args `nth` 1
       haystack <- asString =<< args `nth` 2
@@ -537,6 +548,7 @@ apply f args =
         x ->
           throwTypeError "RegEx or string" x
     BuiltinV MatchB -> do
+      args <- asList arg
       needle <- args `nth` 0
       haystack <- asString =<< args `nth` 2
       case needle of
@@ -547,9 +559,11 @@ apply f args =
         x ->
           throwTypeError "RegEx or string" x
     BuiltinV ParseUrlB -> do
+      args <- asList arg
       url <- asString =<< args `nth` 0
       either throwRuntimeError (return . UrlV) (parseURL url)
     BuiltinV XmlQueryB -> do
+      args <- asList arg
       query <- asString =<< args `nth` 0
       target <- asXml =<< args `nth` 1
       liftIO $
@@ -558,9 +572,11 @@ apply f args =
           print err
           return NullV
     BuiltinV XmlTextB -> do
+      args <- asList arg
       e <- asXml =<< args `nth` 0
       return $ StringV . textContent $ e
     BuiltinV XmlAttribB -> do
+      args <- asList arg
       e <- asXml =<< args `nth` 0
       n <- asString =<< args `nth` 1
       return $ ListV . map StringV $ XML.attribute (uqName n) (XML.fromNode e)

@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Language.ScrapeScript.AST
 where
@@ -23,14 +25,44 @@ data Expr a
   = NullE a
   | LitE a !(Val a)
   | VarE a !Text
-  | LamE a [Text] (Expr a)
-  | AppE a (Expr a) [Expr a]
+  | LamE a !(Pat a) !(Expr a)
+  | AppE a !(Expr a) !(Expr a)
   | DoE a ![Expr a]
   | LetE a !(Pat a) !(Expr a) !(Expr a)
   | ListE a ![Expr a]
   | DictE a ![(Expr a, Expr a)]
   | CaseE a !(Expr a) ![(Pat a, [Expr a], Expr a)]
   deriving (Show, Eq, Functor)
+
+nullE :: Expr ()
+nullE = NullE ()
+
+litE :: Val () -> Expr ()
+litE = LitE ()
+
+varE :: Text -> Expr ()
+varE = VarE ()
+
+lamE :: Pat () -> Expr () -> Expr ()
+lamE = LamE ()
+
+appE :: Expr () -> Expr () -> Expr ()
+appE = AppE ()
+
+doE :: [Expr ()] -> Expr ()
+doE = DoE ()
+
+letE :: Pat () -> Expr () -> Expr () -> Expr ()
+letE = LetE ()
+
+listE :: [Expr ()] -> Expr ()
+listE = ListE ()
+
+dictE :: [(Expr (), Expr ())] -> Expr ()
+dictE = DictE ()
+
+caseE :: Expr () -> [(Pat (), [Expr ()], Expr ())] -> Expr ()
+caseE = CaseE ()
 
 exprPos :: Expr a -> a
 exprPos (NullE p) = p
@@ -106,7 +138,7 @@ data Val a
   | DictV !(Map Text (Val a))
   | LamV
       !(Map Text (Val a)) -- closure
-      ![Text] -- arguments
+      !(Pat a) -- arguments
       !(Expr a) -- body
   | BuiltinV Builtin
   deriving (Show, Functor)
@@ -123,15 +155,6 @@ instance Eq (Val a) where
   DictV a == DictV b = a == b
   BuiltinV a == BuiltinV b = a == b
   _ == _ = False
-
-data Pat a
-  = LitP a !(Val a)
-  | BindP a !Text
-  | ListP a [Pat a]
-  | ListHeadP a [Pat a]
-  | DictP a [(Text, Pat a)]
-  deriving (Show, Eq, Functor)
-
 
 instance IsString (Val a) where
   fromString = StringV . Text.pack
@@ -188,3 +211,29 @@ truthy (DictV m) = not (Map.null m)
 truthy (IntV i) = i /= 0
 truthy (StringV i) = not (Text.null i)
 truthy _ = True
+
+data Pat a
+  = LitP a !(Val a)
+  | BindP a !Text
+  | ListP a ![Pat a]
+  | ListHeadP a ![Pat a]
+  | DictP a ![(Text, Pat a)]
+  deriving (Show, Eq, Functor)
+
+instance IsString (Pat ()) where
+  fromString = BindP () . Text.pack
+
+litP :: Val () -> Pat ()
+litP = LitP ()
+
+bindP :: Text -> Pat ()
+bindP = BindP ()
+
+listP :: [Pat ()] -> Pat ()
+listP = ListP ()
+
+listHeadP :: [Pat ()] -> Pat ()
+listHeadP = ListHeadP ()
+
+dictP :: [(Text, Pat ())] -> Pat ()
+dictP = DictP ()

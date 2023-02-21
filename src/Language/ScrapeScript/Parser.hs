@@ -71,7 +71,7 @@ nonLetExpr =
   choice
     [ doExpr
     , caseExpr
-    , lambdaExpr
+    , lamExpr
     , additiveExpr
     ]
 
@@ -86,15 +86,11 @@ letExpr :: Parser (Expr SourcePos)
 letExpr =
   letBinding <* optional (keyword "in") <*> expr
 
-lambdaExpr :: Parser (Expr SourcePos)
-lambdaExpr =
+lamExpr :: Parser (Expr SourcePos)
+lamExpr =
   LamE
     <$> getSourcePos
-    <*> try
-          ( parentheses
-              (identifier `sepBy` symbol ",")
-            <* symbol "->"
-          )
+    <*> try (parentheses patList <* symbol "->")
     <*> expr
 
 identifier :: Parser Text
@@ -149,14 +145,22 @@ pat = choice
   , listPat
   ]
 
-listPat :: Parser (Pat SourcePos)
-listPat = do
+patList :: Parser (Pat SourcePos)
+patList = do
   p <- getSourcePos
-  void $ symbol "["
   items <- pat `sepBy` symbol ","
   choice
-    [ ListHeadP p items <$ symbol "," <* symbol "..." <* symbol "]"
-    , ListP p items <$ symbol "]"
+    [ try $ ListHeadP p items <$ symbol ".."
+    , pure $ ListP p items
+    ]
+
+listPat :: Parser (Pat SourcePos)
+listPat = brackets $ do
+  p <- getSourcePos
+  items <- pat `sepBy` symbol ","
+  choice
+    [ try $ ListHeadP p items <$ symbol ".."
+    , pure $ ListP p items
     ]
 
 doExpr :: Parser (Expr SourcePos)
@@ -213,7 +217,10 @@ binaryTail :: Parser (Expr SourcePos)
 binaryTail rhsP operations = do
   p <- getSourcePos
   choice
-    [ do { operatorP; rhs <- rhsP; return $ \lhs -> AppE p (LitE p $ BuiltinV operation) [ lhs, rhs ] }
+    [ do { operatorP
+         ; rhs <- rhsP
+         ; return $ \lhs -> AppE p (LitE p $ BuiltinV operation) (ListE p [ lhs, rhs ])
+         }
     | (operatorP, operation) <- operations
     ]
 
@@ -256,11 +263,11 @@ indexTail = do
     maybe (indexF p lhs) (sliceF p lhs) <$> optional (symbol ":" *> optional expr)
   where
     indexF p lhsE containerE =
-      AppE p (LitE p (BuiltinV IndexB)) [containerE, lhsE]
+      AppE p (LitE p (BuiltinV IndexB)) (ListE p [containerE, lhsE])
     sliceF p lhsE (Just rhsE) containerE =
-      AppE p (LitE p (BuiltinV SliceB)) [containerE, lhsE, rhsE]
+      AppE p (LitE p (BuiltinV SliceB)) (ListE p [containerE, lhsE, rhsE])
     sliceF p lhsE Nothing containerE =
-      AppE p (LitE p (BuiltinV SliceB)) [containerE, lhsE]
+      AppE p (LitE p (BuiltinV SliceB)) (ListE p [containerE, lhsE])
 
 dotTail :: Parser (Expr SourcePos -> Expr SourcePos)
 dotTail = do
@@ -269,13 +276,13 @@ dotTail = do
   return $ \containerE ->
     AppE p
       (LitE p (BuiltinV IndexB))
-      [containerE, LitE p (StringV key)]
+      (ListE p [containerE, LitE p (StringV key)])
 
 applyTail :: Parser (Expr SourcePos -> Expr SourcePos)
 applyTail = do
   p <- getSourcePos
-  args <- parentheses (expr `sepBy` symbol ",")
-  return $ \e -> AppE p e args
+  arg <- ListE p <$> parentheses (expr `sepBy` symbol ",")
+  return $ \e -> AppE p e arg
 
 primitiveExpr :: Parser (Expr SourcePos)
 primitiveExpr = choice
