@@ -9,22 +9,23 @@ where
 import Control.Exception
 import Control.Monad.Except
 import Control.Monad.Reader
+import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.IO as Text
 import Data.Text.Encoding (decodeUtf8)
+import qualified Data.Text.IO as Text
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import qualified Network.HTTP.Types as HTTP
 import qualified Text.HTML.DOM as HTML
+import Text.Megaparsec (SourcePos, sourcePosPretty)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 import qualified Text.XML as XML
 import qualified Text.XML.Cursor as XML
-import Text.Megaparsec (SourcePos, sourcePosPretty)
 
 import FGEFB.Regex
 import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
@@ -71,11 +72,14 @@ scSetPos :: p -> ScriptContext p -> ScriptContext p
 scSetPos p ctx =
   ctx { scriptPos = p }
 
+dictV :: [(Text, Val p)] -> Val p
+dictV = DictV . Map.fromList
+
 defVars :: Map Text (Val p)
 defVars = Map.fromList
   [ ("ident", BuiltinV IdentB)
   ---- Debugging ----
-  , ("Debug", DictV $ Map.fromList
+  , ("Debug", dictV
       [ ("log", BuiltinV DebugLogB)
       ]
     )
@@ -93,6 +97,7 @@ defVars = Map.fromList
   ---- Collections (strings, lists, dictionaries) ----
   , ("concat", BuiltinV ConcatB)
   , ("replace", BuiltinV ReplaceB)
+  , ("match", BuiltinV MatchB)
   , ("map", BuiltinV MapB)
   , ("fold", BuiltinV FoldB)
   , ("index", BuiltinV IndexB)
@@ -101,19 +106,19 @@ defVars = Map.fromList
   , ("elems", BuiltinV ElemsB)
 
   ---- HTTP ----
-  , ("HTTP", DictV $ Map.fromList
+  , ("HTTP", dictV
       [ ("get", BuiltinV HttpGetB)
       ]
     )
 
   ---- URL ----
-  , ("URL", DictV $ Map.fromList
+  , ("URL", dictV
       [ ("parse", BuiltinV ParseUrlB)
       ]
     )
 
   ---- DOM ----
-  , ("DOM", DictV $ Map.fromList
+  , ("DOM", dictV
       [ ("query", BuiltinV XmlQueryB)
       , ("text", BuiltinV XmlTextB)
       , ("attrib", BuiltinV XmlAttribB)
@@ -171,7 +176,7 @@ asURL :: Val p -> Interpret p URL
 asURL (UrlV url) = return url
 asURL x = throwTypeError "URL" x
 
-asXML :: Val p -> Interpret p XML.Cursor
+asXML :: Val p -> Interpret p XML.Node
 asXML (XmlV xml) = return xml
 asXML x = throwTypeError "XML" x
 
@@ -208,7 +213,7 @@ asDict :: Val p -> Interpret p (Map Text (Val p))
 asDict (DictV xs) = return xs
 asDict x = throwTypeError "dictionary" x
 
-asXml :: Val p -> Interpret p XML.Cursor
+asXml :: Val p -> Interpret p XML.Node
 asXml (XmlV xml) = return xml
 asXml x = throwTypeError "XML" x
 
@@ -252,7 +257,7 @@ lookupMember keyVal container =
         "host" ->
           return $ maybe NullV StringV $ urlHostName url
         "path" ->
-          return $ ListV . drop 1 . map StringV $ urlPath url
+          return $ ListV . map StringV $ urlPath url
         "query" ->
           return $ maybe NullV (DictV . fmap (maybe NullV StringV) . Map.fromList) $ urlQuery url
         "anchor" ->
@@ -288,8 +293,7 @@ lookupMember keyVal container =
                 [ LitE p container, VarE p "attrName" ]
               )
         "text" -> do
-          let node = XML.node target
-          return $ StringV $ textContent node
+          return $ StringV $ textContent target
         _ -> return NullV
     x -> throwTypeError "container" x
 
@@ -327,7 +331,7 @@ eval (ListE p es) =
   atPos p $
   ListV <$> mapM eval es
 eval (DictE p pairs) = atPos p $ do
-  DictV . Map.fromList <$>
+  dictV <$>
     mapM (\(k, v) -> (,) <$> (eval k >>= asString) <*> eval v) pairs
 eval (LamE p argNames body) = atPos p $ do
   closure <- getVars
@@ -336,6 +340,61 @@ eval (AppE p fE argEs) = atPos p $ do
   f <- eval fE
   args <- mapM eval argEs
   apply f args
+eval (CaseE p scrutineeE branches) = atPos p $ do
+  scrutinee <- eval scrutineeE
+  evalPatMatches scrutinee branches
+
+evalPatMatches :: Val p -> [(Pat p, [Expr p], Expr p)] -> Interpret p (Val p)
+evalPatMatches _ [] =
+  return NullV
+evalPatMatches val ((pat, guards, expr) : branches) =
+  case patMatch val pat of
+    Nothing ->
+      evalPatMatches val branches
+    Just vars ->
+      withVars vars $ do
+        r <- evalGuarded guards expr
+        case r of
+          Nothing -> evalPatMatches val branches
+          Just x -> return x
+
+evalGuarded :: [Expr p] -> Expr p -> Interpret p (Maybe (Val p))
+evalGuarded [] expr =
+  Just <$> eval expr
+evalGuarded (g:gs) expr = do
+  r <- eval g
+  if truthy r then
+    evalGuarded gs expr
+  else
+    return Nothing
+
+patMatch :: Val p -> Pat p -> Maybe (Map Text (Val p))
+patMatch val (LitP _ val') =
+  if val == val' then
+    Just Map.empty
+  else
+    Nothing
+patMatch _ (BindP _ "_") =
+  Just Map.empty
+patMatch val (BindP _ name) =
+  Just (Map.singleton name val)
+patMatch (ListV valItems) (ListP _ patItems)
+  | length valItems == length patItems
+  = mconcat <$> zipWithM patMatch valItems patItems
+  | otherwise
+  = Nothing
+patMatch (ListV valItems) (ListHeadP _ patItems)
+  | length valItems >= length patItems
+  = mconcat <$> zipWithM patMatch valItems patItems
+  | otherwise
+  = Nothing
+patMatch (DictV valMap) (DictP _ patItems) =
+  mconcat <$> forM patItems (\(k, patVal) -> do
+      val <- Map.lookup k valMap
+      patMatch val patVal
+    )
+patMatch _ _ =
+  Nothing
 
 apply :: Val p -> [Val p] -> Interpret p (Val p)
 apply f args =
@@ -387,8 +446,8 @@ apply f args =
           DictV . mconcat <$> mapM asDict args
         StringV {} : _ ->
           StringV . mconcat <$> mapM asString args
-        UrlV {} : _ ->
-          UrlV . mconcat <$> mapM asURL args
+        UrlV u : xs ->
+          UrlV . foldl (<>) u <$> mapM asURL xs
         (x:_) -> throwTypeError "container or string" x
         
     BuiltinV MapB -> do
@@ -399,7 +458,7 @@ apply f args =
         ListV xs ->
           ListV <$> mapM (apply f' . (:[])) xs
         DictV m ->
-          DictV . Map.fromList <$> mapM (\(k, v) -> (k ,) <$> apply f' [v]) (Map.toList m)
+          dictV <$> mapM (\(k, v) -> (k ,) <$> apply f' [v]) (Map.toList m)
         x -> throwTypeError "container" x
 
     BuiltinV FoldB -> do
@@ -492,17 +551,17 @@ apply f args =
       query <- asString =<< args `nth` 0
       target <- asXml =<< args `nth` 1
       liftIO $
-        (ListV . map XmlV <$> evaluate (jqQuery query target))
+        (ListV . map XmlV <$> evaluate (map XML.node $ jqQuery query (XML.fromNode target)))
         `catch` \(err :: SomeException) -> do
           print err
           return NullV
     BuiltinV XmlTextB -> do
       e <- asXml =<< args `nth` 0
-      return $ StringV . textContent . XML.node $ e
+      return $ StringV . textContent $ e
     BuiltinV XmlAttribB -> do
       e <- asXml =<< args `nth` 0
       n <- asString =<< args `nth` 1
-      return $ ListV . map StringV $ XML.attribute (uqName n) e
+      return $ ListV . map StringV $ XML.attribute (uqName n) (XML.fromNode e)
 
     -- BuiltinV b ->
     --   throwRuntimeError $ "Not implemented: " ++ show b
@@ -514,9 +573,18 @@ apply f args =
 
 fetchHTML :: forall p. Text -> Interpret p (Val p)
 fetchHTML urlInitial =
-  XmlV . XML.fromDocument <$> go urlInitial 12
+  go urlInitial 12
+
   where
-    go :: Text -> Int -> Interpret p XML.Document
+    responseDict :: Text -> XML.Document -> Text -> Val p
+    responseDict url doc body =
+      dictV
+        [ ("url", either (const $ StringV url) UrlV $ parseURL url)
+        , ("dom", XmlV . XML.NodeElement . XML.documentRoot $ doc)
+        , ("body", StringV body)
+        ]
+
+    go :: Text -> Int -> Interpret p (Val p)
     go _url 0 =
       throwRuntimeError "Maximum redirect count exceeded"
     go url n = do
@@ -536,16 +604,13 @@ fetchHTML urlInitial =
             urlLeft <- either throwRuntimeError return (parseURL url)
             urlRight <- either throwRuntimeError return (parseURL (decodeUtf8 location))
             let url' = renderURL $ urlLeft <> urlRight
-            liftIO $ print urlLeft
-            liftIO $ print urlRight
-            liftIO $ print (urlLeft <> urlRight)
-            liftIO $ print url'
             if url' == url then
               throwRuntimeError $ "Infinite redirection (location): " <> show url
             else do
               go url' (n - 1)
       else do
-        let document = HTML.parseLBS . HTTP.getResponseBody $ rp
+        let body = HTTP.getResponseBody rp
+        let document = HTML.parseLBS body
         metaRefresh <-
           mapM (combineURLs url) .
           mapMaybe (parseMetaRefresh . mconcat . XML.attribute "content") .
@@ -560,7 +625,7 @@ fetchHTML urlInitial =
             else
               go url' (n - 1)
           [] -> do
-            return document
+            return $ responseDict url document (decodeUtf8 $ LBS.toStrict body)
       where
         redirectCodes = [301, 302, 303, 307, 308]
         parseMetaRefresh :: Text -> Maybe Text

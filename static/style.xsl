@@ -7,6 +7,12 @@
         <link rel="stylesheet" href="/static/style.css"/>
     </head>
     <body> 
+        <xsl:if test="error">
+            <h1>Error</h1>
+            <div class="error">
+                <xsl:value-of select="//error" />
+            </div>
+        </xsl:if>
         <ul class="listing">
         <xsl:for-each select="listing/directory"> 
             <li class="directory">

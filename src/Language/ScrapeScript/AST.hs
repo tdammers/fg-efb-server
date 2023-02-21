@@ -13,7 +13,6 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
 import qualified Data.Vector as Vector
 import qualified Text.XML as XML
-import qualified Text.XML.Cursor as XML
 import Data.String (IsString (..))
 import Data.Default (def)
 
@@ -30,7 +29,8 @@ data Expr a
   | LetE a !Text !(Expr a) !(Expr a)
   | ListE a ![Expr a]
   | DictE a ![(Expr a, Expr a)]
-  deriving (Show, Functor)
+  | CaseE a !(Expr a) ![(Pat a, [Expr a], Expr a)]
+  deriving (Show, Eq, Functor)
 
 exprPos :: Expr a -> a
 exprPos (NullE p) = p
@@ -42,6 +42,7 @@ exprPos (DoE p _) = p
 exprPos (LetE p _ _ _) = p
 exprPos (ListE p _) = p
 exprPos (DictE p _) = p
+exprPos (CaseE p _ _) = p
 
 isNullE :: Expr a -> Bool
 isNullE (NullE _) = True
@@ -100,7 +101,7 @@ data Val a
   | IntV !Integer
   | RegexV !Text
   | UrlV !URL
-  | XmlV !XML.Cursor
+  | XmlV !XML.Node
   | ListV ![Val a] -- TODO: Use Vector
   | DictV !(Map Text (Val a))
   | LamV
@@ -109,6 +110,28 @@ data Val a
       !(Expr a) -- body
   | BuiltinV Builtin
   deriving (Show, Functor)
+
+instance Eq (Val a) where
+  NullV == NullV = True
+  BoolV a == BoolV b = a == b
+  StringV a == StringV b = a == b
+  IntV a == IntV b = a == b
+  RegexV a == RegexV b = a == b
+  UrlV a == UrlV b = a == b
+  XmlV a == XmlV b = a == b
+  ListV a == ListV b = a == b
+  DictV a == DictV b = a == b
+  BuiltinV a == BuiltinV b = a == b
+  _ == _ = False
+
+data Pat a
+  = LitP a !(Val a)
+  | BindP a !Text
+  | ListP a [Pat a]
+  | ListHeadP a [Pat a]
+  | DictP a [(Text, Pat a)]
+  deriving (Show, Eq, Functor)
+
 
 instance IsString (Val a) where
   fromString = StringV . Text.pack
@@ -143,8 +166,8 @@ stringify (LamV {}) =
   "<<lambda>>"
 stringify (BuiltinV b) =
   "<<builtin:" <> (Text.dropEnd 1 . Text.pack $ show b) <> ">>"
-stringify (XmlV cursor) =
-  case XML.node cursor of
+stringify (XmlV node) =
+  case node of
     XML.NodeElement e ->
       let doc = xmlFragmentToDocumentNoPrologue e
       in LText.toStrict $

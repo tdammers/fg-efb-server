@@ -61,6 +61,7 @@ nonLetExpr :: Parser (Expr SourcePos)
 nonLetExpr =
   choice
     [ doExpr
+    , caseExpr
     , lambdaExpr
     , additiveExpr
     ]
@@ -115,6 +116,40 @@ dictExpr =
 
 groupExpr :: Parser (Expr SourcePos)
 groupExpr = between (symbol "(") (symbol ")") expr
+
+caseExpr :: Parser (Expr SourcePos)
+caseExpr = do
+  p <- getSourcePos
+  keyword "case"
+  scrutinee <- between (symbol "(") (symbol ")") expr
+  branches <- between (symbol "{") (symbol "}") (caseBranch `sepBy` symbol ";")
+  return $ CaseE p scrutinee branches
+
+caseBranch :: Parser (Pat SourcePos, [Expr SourcePos], Expr SourcePos)
+caseBranch = do
+  branchPat <- pat
+  guards <- option [] $ symbol "|" *> expr `sepBy` symbol ","
+  symbol "->"
+  branchBody <- expr
+  return (branchPat, guards, branchBody)
+
+pat :: Parser (Pat SourcePos)
+pat = choice
+  [ LitP <$> getSourcePos <*> val
+  , BindP <$> getSourcePos <*> identifier <* whitespace
+  , between (symbol "(") (symbol ")") pat
+  , listPat
+  ]
+
+listPat :: Parser (Pat SourcePos)
+listPat = do
+  p <- getSourcePos
+  void $ symbol "["
+  items <- pat `sepBy` symbol ","
+  choice
+    [ ListHeadP p items <$ symbol "," <* symbol "..." <* symbol "]"
+    , ListP p items <$ symbol "]"
+    ]
 
 doExpr :: Parser (Expr SourcePos)
 doExpr = do

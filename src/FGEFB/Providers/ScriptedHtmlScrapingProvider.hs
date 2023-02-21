@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE LambdaCase #-}
 
 module FGEFB.Providers.ScriptedHtmlScrapingProvider
 where
@@ -13,7 +14,7 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Network.HTTP.Base (urlDecode)
-import Text.Megaparsec.Pos (SourcePos, initialPos)
+import Text.Megaparsec.Pos (SourcePos (..), initialPos, unPos)
 
 import Language.ScrapeScript.AST
 import Language.ScrapeScript.Interpreter
@@ -25,11 +26,17 @@ import FGEFB.URL (renderURL, parseURL, URL (..))
 scriptedHtmlScrapingProvider :: ProviderContext
                      -> Maybe Text
                      -> Text -- ^ root URL
-                     -> Expr SourcePos -- ^ folder list script
-                     -> Expr SourcePos -- ^ document list script
-                     -> Expr SourcePos -- ^ document URL script
+                     -> Text -- ^ folder script source
+                     -> Expr SourcePos -- ^ folder script
+                     -> Text -- ^ document script source
+                     -> Expr SourcePos -- ^ document script
                      -> Provider
-scriptedHtmlScrapingProvider context mlabel rootURLText subdirScript docsScript docURLScript =
+scriptedHtmlScrapingProvider
+    context
+    mlabel
+    rootURLText
+    folderScriptSrc folderScript
+    docScriptSrc docScript =
   Provider
     { label = mlabel
     , getPdfPage = \pathEnc page -> do
@@ -37,28 +44,24 @@ scriptedHtmlScrapingProvider context mlabel rootURLText subdirScript docsScript 
             pathURL = either (const NullV) UrlV $ parseURL . unpackParam $ pathEnc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
         localURL <- runScriptWith
-                      (initialPos "document script")
+                      (initialPos "document")
                       asURL
                       extraVars
-                      docURLScript
+                      docScriptSrc
+                      docScript
         loadPdfPageHttp (renderURL $ rootURL <> localURL) page
     , listFiles = \pathEnc -> do
         let pathText = unpackParam pathEnc
             pathURL = either (const NullV) UrlV $ parseURL . unpackParam $ pathEnc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
-        subfolders <-
+        links <-
           runScriptWith
-            (initialPos "folders script")
-            (asList >=> mapM (makeLink Directory))
+            (initialPos "folder")
+            (asList >=> mapM makeLink)
             extraVars
-            subdirScript
-        docs <-
-          runScriptWith
-            (initialPos "documents script")
-            (asList >=> mapM (makeLink PDFFile))
-            extraVars
-            docsScript
-        return $ subfolders ++ docs
+            folderScriptSrc
+            folderScript
+        return links
     }
   where
     unpackParam :: Text -> Text
@@ -75,19 +78,32 @@ scriptedHtmlScrapingProvider context mlabel rootURLText subdirScript docsScript 
     runScriptWith :: SourcePos
                   -> (Val SourcePos -> Interpret SourcePos a)
                   -> [(Text, Val SourcePos)]
+                  -> Text
                   -> Expr SourcePos
                   -> IO a
-    runScriptWith p convert extraDefs stmt = do
+    runScriptWith p convert extraDefs src stmt = do
       let vars = Map.fromList extraDefs <> defScriptVars
       result <- runInterpret p vars (eval stmt >>= convert)
       case result of
-        Left err -> throw err
+        Left err -> do
+          let errorLoc = runtimeErrorLocation err
+          let errorLine = Text.unpack $ Text.lines src !! (unPos (sourceLine errorLoc) - 1)
+              errorMarker = replicate (unPos (sourceColumn errorLoc) - 1) ' ' ++ "^"
+          throw err
+            { runtimeErrorMessage =
+                unlines [ runtimeErrorMessage err, errorLine, errorMarker ]
+            }
         Right x -> return x
 
-    makeLink :: FileType -> Val SourcePos -> Interpret SourcePos FileInfo
-    makeLink fileType val = do
-      fileName <- asUrlString =<< lookupMember "name" val
-      filePath <- asUrlString =<< lookupMember "path" val
+    makeLink :: Val SourcePos -> Interpret SourcePos FileInfo
+    makeLink val = do
+      fileName <- lookupMember "name" val >>= asUrlString
+      filePath <- lookupMember "path" val >>= asUrlString
+      fileType <- lookupMember "type" val >>= asString >>= \case
+        "dir" -> return Directory
+        "pdf" -> return PDFFile
+        x -> throwRuntimeError $
+                "Expected \"dir\" or \"pdf\", but got " ++ show x
       return FileInfo
         { fileName
         , filePath

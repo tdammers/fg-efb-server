@@ -22,6 +22,7 @@ import Data.Maybe (fromMaybe, catMaybes, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
+import qualified Data.Text.Lazy.IO as LText
 import Data.Time (UTCTime (..), getCurrentTime)
 import qualified Data.Yaml as YAML
 import qualified Network.HTTP.Types as HTTP
@@ -77,6 +78,18 @@ styleCSS = do
 
 app :: Cache Text [FileInfo] -> Provider -> ScottyM ()
 app listingCache provider = do
+  Scotty.defaultHandler $ \err -> do
+    Scotty.liftAndCatchIO $ LText.putStrLn err
+    Scotty.setHeader "Content-type" "text/xml"
+    Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
+      XML.Element
+        "error"
+        (Map.fromList
+          []
+        )
+        [ XML.NodeContent "Something went wrong." ]
+        -- [ XML.NodeContent (LText.toStrict err) ]
+
   Scotty.get "/" $ do
     Scotty.headers >>= Scotty.liftAndCatchIO . print
     Scotty.redirect "/api"
