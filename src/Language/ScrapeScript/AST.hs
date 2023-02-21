@@ -18,7 +18,7 @@ import qualified Text.XML as XML
 import Data.String (IsString (..))
 import Data.Default (def)
 
-import FGEFB.URL (URL, renderURL)
+import FGEFB.URL (URL, renderURLText)
 import FGEFB.XmlUtil
 
 data Expr a
@@ -118,7 +118,11 @@ data Builtin
 
   ---- HTTP ----
   | HttpGetB
+
+  ---- URL ----
   | ParseUrlB
+  | EncodeUrlB
+  | DecodeUrlB
 
   ---- DOM ----
   | XmlQueryB
@@ -180,7 +184,7 @@ stringify (BoolV False) = "false"
 stringify (StringV t) = Text.pack $ show t
 stringify (IntV i) = Text.pack $ show i
 stringify (RegexV r) = "/" <> r <> "/"
-stringify (UrlV u) = renderURL u
+stringify (UrlV u) = renderURLText u
 stringify (ListV xs) =
   "[" <> Text.intercalate ", " (map stringify xs) <> "]"
 stringify (DictV pairs) =

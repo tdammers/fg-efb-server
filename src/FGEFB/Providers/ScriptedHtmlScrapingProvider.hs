@@ -7,13 +7,14 @@
 module FGEFB.Providers.ScriptedHtmlScrapingProvider
 where
 
-import Control.Monad.Except
 import Control.Exception
+import Control.Monad.Except
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Network.HTTP.Base (urlDecode)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Network.HTTP.Types (urlDecode)
 import Text.Megaparsec.Pos (SourcePos (..), initialPos, unPos)
 
 import Language.ScrapeScript.AST
@@ -21,7 +22,7 @@ import Language.ScrapeScript.Interpreter
 
 import FGEFB.LoadPDF
 import FGEFB.Provider
-import FGEFB.URL (renderURL, parseURL, URL (..))
+import FGEFB.URL (renderURLText, parseURLText, URL (..))
 
 scriptedHtmlScrapingProvider :: ProviderContext
                      -> Maybe Text
@@ -41,7 +42,7 @@ scriptedHtmlScrapingProvider
     { label = mlabel
     , getPdfPage = \pathEnc page -> do
         let pathText = unpackParam pathEnc
-            pathURL = either (const NullV) UrlV $ parseURL . unpackParam $ pathEnc
+            pathURL = either (const NullV) UrlV $ parseURLText . unpackParam $ pathEnc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
         localURL <- runScriptWith
                       (initialPos "document")
@@ -49,26 +50,24 @@ scriptedHtmlScrapingProvider
                       extraVars
                       docScriptSrc
                       docScript
-        loadPdfPageHttp (renderURL $ rootURL <> localURL) page
+        loadPdfPageHttp (renderURLText $ rootURL <> localURL) page
     , listFiles = \pathEnc -> do
         let pathText = unpackParam pathEnc
-            pathURL = either (const NullV) UrlV $ parseURL . unpackParam $ pathEnc
+            pathURL = either (const NullV) UrlV $ parseURLText . unpackParam $ pathEnc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
-        links <-
-          runScriptWith
-            (initialPos "folder")
-            (asList >=> mapM makeLink)
-            extraVars
-            folderScriptSrc
-            folderScript
-        return links
+        runScriptWith
+          (initialPos "folder")
+          (asList >=> mapM makeLink)
+          extraVars
+          folderScriptSrc
+          folderScript
     }
   where
     unpackParam :: Text -> Text
-    unpackParam = Text.pack . urlDecode . Text.unpack
+    unpackParam = decodeUtf8 . urlDecode True . encodeUtf8
     
     rootURL :: URL
-    rootURL = either error id $ parseURL rootURLText
+    rootURL = either error id $ parseURLText rootURLText
 
     defScriptVars :: Map Text (Val SourcePos)
     defScriptVars =

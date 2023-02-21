@@ -27,7 +27,7 @@ import qualified Text.XML.Cursor as XML
 import FGEFB.LoadPDF
 import FGEFB.Provider
 import FGEFB.Regex
-import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
+import FGEFB.URL (renderURLText, parseURLText, URL (..), normalizeURL)
 import FGEFB.Util
 import FGEFB.XmlUtil
 
@@ -145,14 +145,14 @@ matchLinkContext url spec =
 matchPatternContext :: URL -> Text -> Bool
 matchPatternContext url' pattern' =
   case Text.take 1 pattern of
-    "^" -> Text.drop 1 pattern `Text.isSuffixOf` renderURL url
+    "^" -> Text.drop 1 pattern `Text.isSuffixOf` renderURLText url
     "!" -> not . matchPatternContext url $ Text.drop 1 pattern
-    _ -> renderURL url == pattern
+    _ -> renderURLText url == pattern
     where
       url = makeHostRelative url'
       pattern = Text.replace
                   "{anchor}"
-                  (fromMaybe "" $ urlAnchor url)
+                  (decodeUtf8 . fromMaybe "" $ urlAnchor url)
                   pattern'
 
 instance JSON.FromJSON LinkSpec where
@@ -183,13 +183,13 @@ extractLinks currentURL spec root = applySorting $ do
   if keep then do
     hrefRaw <- extract (replaceVars <$> linkHrefExtraction spec) xmlElem
     let href = formatLabel (linkHrefFormat spec) hrefRaw
-    url <- either (const []) return $ parseURL href
+    url <- either (const []) return $ parseURLText href
     return (labelFormatted, url, linkAutoFollow spec)
   else do
     []
   where
     replaceVars =
-      Text.replace "{anchor}" $ fromMaybe "" (urlAnchor currentURL)
+      Text.replace "{anchor}" . decodeUtf8 $ fromMaybe "" (urlAnchor currentURL)
     applySorting =
       case linkSort spec of
         SortLinkNone -> id
@@ -208,15 +208,15 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
     { label = mlabel
     , getPdfPage = \filenameEnc page -> do
         let filename = urlDecode . Text.unpack $ filenameEnc
-            localURL = either error id . parseURL . Text.pack $ filename
-        loadPdfPageHttp (renderURL $ rootURL <> localURL) page
+            localURL = either error id . parseURLText . Text.pack $ filename
+        loadPdfPageHttp (renderURLText $ rootURL <> localURL) page
     , listFiles = \pathEnc -> do
         let go :: Text -> IO [FileInfo]
             go path = do
               let actualPath = if Text.null path then landingPath else path
-                  actualURL = normalizeURL . either error id . parseURL $ actualPath
-              (parentPath, document) <- fetchListing (renderURL $ rootURL <> actualURL)
-              let currentURL = either error id $ parseURL parentPath
+                  actualURL = normalizeURL . either error id . parseURLText $ actualPath
+              (parentPath, document) <- fetchListing (renderURLText $ rootURL <> actualURL)
+              let currentURL = either error id $ parseURLText parentPath
               let root = XML.fromDocument document
                   folderLinks =
                     concatMap
@@ -237,8 +237,8 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
                   let url = (currentURL <> linkUrl)
                           { urlHostName = Nothing, urlProtocol = Nothing }
 
-                  printf "Auto-following %s -> %s\n" path (renderURL url)
-                  go $ renderURL url
+                  printf "Auto-following %s -> %s\n" path (renderURLText url)
+                  go $ renderURLText url
         let path = Text.pack . urlDecode . Text.unpack $ pathEnc
         go path
         
@@ -253,7 +253,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
       landingPath = interpolateVars vars landingPathTemplate
 
       rootURL :: URL
-      rootURL = either error id $ parseURL rootUrlStr
+      rootURL = either error id $ parseURLText rootUrlStr
 
       makeLink :: Bool -> URL -> (Text, URL, Bool) -> FileInfo
       makeLink isDir currentURL (linkLabel, linkUrl, _) =
@@ -269,7 +269,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
           url = makeHostRelative (currentURL <> linkUrl)
 
           path :: Text
-          path = withString urlEncode $ renderURL url
+          path = withString urlEncode $ renderURLText url
 
 makeHostRelative :: URL -> URL
 makeHostRelative url = url { urlHostName = Nothing, urlProtocol = Nothing }
@@ -293,9 +293,9 @@ fetchListing url = go url 12
             error "Missing location header"
           Just location -> do
             printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
-            let redirectUrl = renderURL $
-                        either error id (parseURL currentUrl) <>
-                        either error id (parseURL (decodeUtf8 location))
+            let redirectUrl = renderURLText $
+                        either error id (parseURLText currentUrl) <>
+                        either error id (parseURLText (decodeUtf8 location))
             if redirectUrl == currentUrl then
               error "Infinite redirection"
             else do
@@ -338,6 +338,6 @@ for = flip map
 combineURLs :: Text -> Text -> Text
 combineURLs current new =
   either error id $ do
-    currentURL <- parseURL current
-    newURL <- parseURL new
-    return $ renderURL (currentURL <> newURL)
+    currentURL <- parseURLText current
+    newURL <- parseURLText new
+    return $ renderURLText (currentURL <> newURL)

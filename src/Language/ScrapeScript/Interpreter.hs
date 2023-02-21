@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE LambdaCase #-}
 
 module Language.ScrapeScript.Interpreter
 where
@@ -16,11 +15,12 @@ import qualified Data.Map as Map
 import Data.Maybe (mapMaybe, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Text.IO as Text
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import qualified Network.HTTP.Types as HTTP
+import Network.HTTP.Types.URI (urlEncode, urlDecode)
 import qualified Text.HTML.DOM as HTML
 import Text.Megaparsec (SourcePos, sourcePosPretty)
 import Text.Printf (printf)
@@ -29,7 +29,7 @@ import qualified Text.XML as XML
 import qualified Text.XML.Cursor as XML
 
 import FGEFB.Regex
-import FGEFB.URL (renderURL, parseURL, URL (..), normalizeURL)
+import FGEFB.URL (renderURLText, parseURLText, URL (..), normalizeURL)
 import FGEFB.Util
 import FGEFB.XmlUtil
 import Language.ScrapeScript.AST
@@ -115,6 +115,7 @@ defVars = Map.fromList
   ---- URL ----
   , ("URL", dictV
       [ ("parse", BuiltinV ParseUrlB)
+      , ("encode", BuiltinV EncodeUrlB)
       ]
     )
 
@@ -150,7 +151,7 @@ eitherInterpret (Left err) = throwRuntimeError err
 eitherInterpret (Right a) = return a
 
 readURL :: Text -> Interpret p URL
-readURL = eitherInterpret . parseURL
+readURL = eitherInterpret . parseURLText
 
 lookupVar :: Text -> Interpret p (Val p)
 lookupVar name = do
@@ -187,7 +188,7 @@ asString x = throwTypeError "string" x
 
 asUrlString :: Val p -> Interpret p Text
 asUrlString (StringV str) = return str
-asUrlString (UrlV url) = return $ renderURL url
+asUrlString (UrlV url) = return $ renderURLText url
 asUrlString x = throwTypeError "string" x
 
 asInt :: Val p -> Interpret p Int
@@ -256,13 +257,13 @@ lookupMember keyVal container =
         "protocol" ->
           return $ maybe NullV (StringV . tshow) $ urlProtocol url
         "host" ->
-          return $ maybe NullV StringV $ urlHostName url
+          return $ maybe NullV (StringV . decodeUtf8) $ urlHostName url
         "path" ->
           return $ ListV . map StringV $ urlPath url
         "query" ->
           return $ maybe NullV (DictV . fmap (maybe NullV StringV) . Map.fromList) $ urlQuery url
         "anchor" ->
-          return $ maybe NullV StringV $ urlAnchor url
+          return $ maybe NullV (StringV . decodeUtf8) $ urlAnchor url
         "relative" ->
           return $ UrlV url
             { urlProtocol = Nothing
@@ -415,7 +416,8 @@ apply f arg =
       return arg
 
     BuiltinV DebugLogB -> do
-      liftIO $ Text.putStrLn . stringify $ arg
+      args <- asList arg
+      liftIO $ mapM_ (Text.putStrLn . stringify) $ args
       return arg
 
     BuiltinV SumB -> do
@@ -529,12 +531,12 @@ apply f arg =
         UrlV url ->
           return url
         StringV urlText -> do
-          case parseURL urlText of
+          case parseURLText urlText of
             Left err -> throwRuntimeError err
             Right url -> return (normalizeURL url)
         x -> throwTypeError "URL or string" x
       rootURL <- lookupVarDef (UrlV mempty) "rootURL" >>= asURL
-      fetchHTML (renderURL $ rootURL <> actualURL)
+      fetchHTML (renderURLText $ rootURL <> actualURL)
     BuiltinV ReplaceB -> do
       args <- asList arg
       needle <- args `nth` 0
@@ -561,7 +563,15 @@ apply f arg =
     BuiltinV ParseUrlB -> do
       args <- asList arg
       url <- asString =<< args `nth` 0
-      either throwRuntimeError (return . UrlV) (parseURL url)
+      either throwRuntimeError (return . UrlV) (parseURLText url)
+    BuiltinV EncodeUrlB -> do
+      args <- asList arg
+      str <- asString =<< args `nth` 0
+      return $ StringV . decodeUtf8 . urlEncode True . encodeUtf8 $ str
+    BuiltinV DecodeUrlB -> do
+      args <- asList arg
+      str <- asString =<< args `nth` 0
+      return $ StringV . decodeUtf8 . urlDecode True . encodeUtf8 $ str
     BuiltinV XmlQueryB -> do
       args <- asList arg
       query <- asString =<< args `nth` 0
@@ -597,7 +607,7 @@ fetchHTML urlInitial =
     responseDict :: Text -> XML.Document -> Text -> Val p
     responseDict url doc body =
       dictV
-        [ ("url", either (const $ StringV url) UrlV $ parseURL url)
+        [ ("url", either (const $ StringV url) UrlV $ parseURLText url)
         , ("dom", XmlV . XML.NodeElement . XML.documentRoot $ doc)
         , ("body", StringV body)
         ]
@@ -619,9 +629,9 @@ fetchHTML urlInitial =
             throwRuntimeError "Missing location header"
           Just location -> do
             liftIO $ printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
-            urlLeft <- either throwRuntimeError return (parseURL url)
-            urlRight <- either throwRuntimeError return (parseURL (decodeUtf8 location))
-            let url' = renderURL $ urlLeft <> urlRight
+            urlLeft <- either throwRuntimeError return (parseURLText url)
+            urlRight <- either throwRuntimeError return (parseURLText (decodeUtf8 location))
+            let url' = renderURLText $ urlLeft <> urlRight
             if url' == url then
               throwRuntimeError $ "Infinite redirection (location): " <> show url
             else do
@@ -662,4 +672,4 @@ combineURLs :: Text -> Text -> Interpret p Text
 combineURLs current new = do
   currentURL <- readURL current
   newURL <- readURL new
-  return $ renderURL (currentURL <> newURL)
+  return $ renderURLText (currentURL <> newURL)
