@@ -148,20 +148,31 @@ pat = choice
 patList :: Parser (Pat SourcePos)
 patList = do
   p <- getSourcePos
-  items <- pat `sepBy` symbol ","
-  choice
-    [ try $ ListHeadP p items <$ symbol ".."
-    , pure $ ListP p items
-    ]
+  ListP p <$> listItemPat `sepBy` symbol ","
+
+listItemPat :: Parser (ListItemPat SourcePos)
+listItemPat = listRemainderItemPat <|> simpleListItemPat
+
+listRemainderItemPat :: Parser (ListItemPat SourcePos)
+listRemainderItemPat = try $ do
+  p <- getSourcePos
+  ListTailPat p <$> option "_" identifier <* symbol "..."
+
+simpleListItemPat :: Parser (ListItemPat SourcePos)
+simpleListItemPat = do
+  p <- getSourcePos
+  basePat <- pat
+  optionalMarkerMaybe <- optional (symbol "?")
+  case optionalMarkerMaybe of
+    Just () ->
+      return $ OptionalListItemPat p basePat
+    Nothing ->
+      return $ RequiredListItemPat p basePat
 
 listPat :: Parser (Pat SourcePos)
 listPat = brackets $ do
   p <- getSourcePos
-  items <- pat `sepBy` symbol ","
-  choice
-    [ try $ ListHeadP p items <$ symbol ".."
-    , pure $ ListP p items
-    ]
+  ListP p <$> listItemPat `sepBy` symbol ","
 
 doExpr :: Parser (Expr SourcePos)
 doExpr = do

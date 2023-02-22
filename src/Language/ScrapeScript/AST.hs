@@ -111,6 +111,7 @@ data Builtin
   | ReplaceB
   | MapB
   | FoldB
+  | FilterB
   | IndexB
   | SliceB
   | KeysB
@@ -219,25 +220,33 @@ truthy _ = True
 data Pat a
   = LitP a !(Val a)
   | BindP a !Text
-  | ListP a ![Pat a]
-  | ListHeadP a ![Pat a]
+  | ListP a ![ListItemPat a]
   | DictP a ![(Text, Pat a)]
   deriving (Show, Eq, Functor)
 
 instance IsString (Pat ()) where
   fromString = BindP () . Text.pack
 
+data ListItemPat a
+  = RequiredListItemPat a (Pat a)
+  | OptionalListItemPat a (Pat a)
+  | ListTailPat a !Text
+  deriving (Show, Eq, Functor)
+
+instance IsString (ListItemPat ()) where
+  fromString = RequiredListItemPat () . fromString
+    
 litP :: Val () -> Pat ()
 litP = LitP ()
 
 bindP :: Text -> Pat ()
 bindP = BindP ()
 
-listP :: [Pat ()] -> Pat ()
+listP :: [ListItemPat ()] -> Pat ()
 listP = ListP ()
 
 listHeadP :: [Pat ()] -> Pat ()
-listHeadP = ListHeadP ()
+listHeadP items = listP (map (RequiredListItemPat ()) items ++ [ListTailPat () "_"])
 
 dictP :: [(Text, Pat ())] -> Pat ()
 dictP = DictP ()

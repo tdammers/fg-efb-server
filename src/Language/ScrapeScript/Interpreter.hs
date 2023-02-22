@@ -100,6 +100,7 @@ defVars = Map.fromList
   , ("replace", BuiltinV ReplaceB)
   , ("match", BuiltinV MatchB)
   , ("map", BuiltinV MapB)
+  , ("filter", BuiltinV FilterB)
   , ("fold", BuiltinV FoldB)
   , ("index", BuiltinV IndexB)
   , ("slice", BuiltinV SliceB)
@@ -381,21 +382,38 @@ patMatch _ (BindP _ "_") =
 patMatch val (BindP _ name) =
   Just (Map.singleton name val)
 patMatch (ListV valItems) (ListP _ patItems)
-  | length valItems == length patItems
-  = mconcat <$> zipWithM patMatch valItems patItems
-  | otherwise
-  = Nothing
-patMatch (ListV valItems) (ListHeadP _ patItems)
-  | length valItems >= length patItems
-  = mconcat <$> zipWithM patMatch valItems patItems
-  | otherwise
-  = Nothing
+  = patMatchListItems valItems patItems
 patMatch (DictV valMap) (DictP _ patItems) =
   mconcat <$> forM patItems (\(k, patVal) -> do
       val <- Map.lookup k valMap
       patMatch val patVal
     )
 patMatch _ _ =
+  Nothing
+
+patMatchListItems :: [Val p] -> [ListItemPat p] -> Maybe (Map Text (Val p))
+patMatchListItems [] [] =
+  Just Map.empty
+patMatchListItems (x:xs) (RequiredListItemPat _ rp : ps) = do
+  this <- patMatch x rp
+  rest <- patMatchListItems xs ps
+  return $ this <> rest
+patMatchListItems [] (RequiredListItemPat _ _ : _) =
+  Nothing
+patMatchListItems (x:xs) (OptionalListItemPat _ rp : ps) =
+  case patMatch x rp of
+    Nothing ->
+      patMatchListItems (x:xs) ps
+    Just this -> do
+      rest <- patMatchListItems xs ps
+      return $ this <> rest
+patMatchListItems [] (OptionalListItemPat _ _ : ps) =
+  patMatchListItems [] ps
+patMatchListItems xs [ListTailPat _ name] =
+  Just $ Map.singleton name (ListV xs)
+patMatchListItems _ (ListTailPat _ _ : _) =
+  Nothing
+patMatchListItems (_:_) [] =
   Nothing
 
 withPatMatch :: Val p -> Pat p -> Interpret p a -> Interpret p a
@@ -467,6 +485,18 @@ apply f arg =
           ListV <$> mapM (apply f' . ListV . (:[])) xs
         DictV m ->
           dictV <$> mapM (\(k, v) -> (k ,) <$> apply f' (ListV [v])) (Map.toList m)
+        x -> throwTypeError "container" x
+
+    BuiltinV FilterB -> do
+      args <- asList arg
+      f' <- args `nth` 0
+      container <- args `nth` 1
+      case container of
+        NullV -> return NullV
+        ListV xs ->
+          ListV <$> filterM (fmap truthy . apply f' . ListV . (:[])) xs
+        DictV m ->
+          dictV <$> filterM (\(k, v) -> truthy <$> apply f' (ListV [v, StringV k])) (Map.toList m)
         x -> throwTypeError "container" x
 
     BuiltinV FoldB -> do
@@ -552,7 +582,7 @@ apply f arg =
     BuiltinV MatchB -> do
       args <- asList arg
       needle <- args `nth` 0
-      haystack <- asString =<< args `nth` 2
+      haystack <- asString =<< args `nth` 1
       case needle of
         RegexV re -> 
           return $ BoolV $ reTest re haystack
