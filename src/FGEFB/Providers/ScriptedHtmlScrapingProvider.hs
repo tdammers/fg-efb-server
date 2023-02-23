@@ -27,8 +27,10 @@ import FGEFB.URL (renderURLText, parseURLText, URL (..))
 scriptedHtmlScrapingProvider :: ProviderContext
                      -> Maybe Text
                      -> Text -- ^ root URL
+                     -> FilePath -- ^ folder script filename
                      -> Text -- ^ folder script source
                      -> Expr SourcePos -- ^ folder script
+                     -> FilePath -- ^ document script filename
                      -> Text -- ^ document script source
                      -> Expr SourcePos -- ^ document script
                      -> Provider
@@ -36,8 +38,8 @@ scriptedHtmlScrapingProvider
     context
     mlabel
     rootURLText
-    folderScriptSrc folderScript
-    docScriptSrc docScript =
+    folderScriptFilename folderScriptSrc folderScript
+    docScriptFilename docScriptSrc docScript =
   Provider
     { label = mlabel
     , getPdfPage = \pathEnc page -> do
@@ -45,7 +47,7 @@ scriptedHtmlScrapingProvider
             pathURL = either (const NullV) UrlV $ parseURLText . unpackParam $ pathEnc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
         localURL <- runScriptWith
-                      (initialPos "document")
+                      (initialPos docScriptFilename)
                       asURL
                       extraVars
                       docScriptSrc
@@ -56,7 +58,7 @@ scriptedHtmlScrapingProvider
             pathURL = either (const NullV) UrlV $ parseURLText . unpackParam $ pathEnc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
         runScriptWith
-          (initialPos "folder")
+          (initialPos folderScriptFilename)
           (asList >=> mapM makeLink)
           extraVars
           folderScriptSrc

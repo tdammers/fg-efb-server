@@ -1,0 +1,59 @@
+do {
+  collapsePath <- (path) -> do {
+    fold(concat, map((a) -> "/" ~ a, path))[1:]
+  };
+
+  case (pathStr) {
+    "" -> do {
+      rp <- HTTP.get(pathURL);
+      [link, ...] <- rp.dom.query("td.green a");
+      relUrl <- URL.parse(link.attr("href")[0]);
+      url <- rp.url ~ relUrl;
+      rp <- HTTP.get(url);
+      frame <- rp.dom.query("frame")[0];
+      url <- rp.url ~ URL.parse(frame.attr("src")[0]);
+      rp <- HTTP.get(url);
+      frame <- rp.dom.query("frame[name=eAISNavigation]")[0];
+      url <- rp.url ~ URL.parse(frame.attr("src")[0]);
+      rp <- HTTP.get(url);
+      links <-
+        filter(
+          (link) -> match(/CHARTS RELATED TO AERODROME/ , link.text),
+          rp.dom.query("div#ADen-GBdetails .Hx>a[href][id~='2.24'][id$='en-GB']")
+        );
+      map((link) -> do {
+        hrefUrlStr <- link.attr("href")[0];
+        hrefUrl <- URL.parse(hrefUrlStr);
+        linkUrl <- url ~ hrefUrl;
+        linkUrlRel <- linkUrl.relative;
+        path <- collapsePath(linkUrl.path);
+        {
+          "type": "dir",
+          "name": replace("BI-AD ", "",
+                  replace(/(.*) - (.*) 1.*/, "$1",
+                    hrefUrlStr)),
+          "path": path
+        }
+      }, links)
+    };
+
+    other -> do {
+      rp <- HTTP.get(pathURL);
+      linkRows <- rp.dom.query("table.IndSubTable tr:has(a.ulink[href])");
+      map((linkRow) -> do {
+        link <- linkRow.query("a.ulink[href]")[0];
+        labelTD <- linkRow.query("td")[0];
+        hrefUrlStr <- link.attr("href")[0];
+        hrefUrl <- URL.parse(hrefUrlStr);
+        linkUrl <- pathURL ~ hrefUrl;
+        linkUrlRel <- linkUrl.relative;
+        path <- collapsePath(linkUrl.path);
+        {
+          "type": "pdf",
+          "name": labelTD.text,
+          "path": path
+        }
+      }, linkRows)
+    }
+  }
+}

@@ -215,7 +215,7 @@ defProviders :: Map Text ProviderFactory
 defProviders = [
     ( "default"
     , ProviderFactory $
-        const $
+        const . return $
           localFileProvider (Just "default") "."
     )
   ]
@@ -243,7 +243,7 @@ runServer = do
       providerFactories <-
         loadFirstConfigFileOrElse defProviders "providers.yaml"
       let context = defProviderContext { contextDefs = defs }
-          providers = fmap (\factory -> makeProvider factory context) providerFactories
+      providers <- mapM (\factory -> makeProvider factory context) providerFactories
 
       runServerWith providers
     ) `catch` (\(err :: SomeException) -> putStrLn $ displayException err)
