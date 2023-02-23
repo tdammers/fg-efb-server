@@ -1,4 +1,4 @@
-PDFCACHE=./cache \
+CACHE_DIR=./cache \
     ghcid \
     --test Main.main \
     --reload=providers.yaml \

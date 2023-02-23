@@ -172,10 +172,10 @@ xmlProviderEntry (key, provider) =
 
 runServerWith :: Map Text Provider -> IO ()
 runServerWith providers = do
-  lookupEnv "PDFCACHE" >>= \case
+  lookupEnv "CACHE_DIR" >>= \case
     Nothing -> do
       withSystemTempDirectory "fg-efb-cache" $ \tmpdir -> do
-        setEnv "PDFCACHE" tmpdir
+        setEnv "CACHE_DIR" tmpdir
         run
     Just _ -> do
       run

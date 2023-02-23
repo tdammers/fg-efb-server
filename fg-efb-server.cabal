@@ -25,6 +25,7 @@ executable fg-efb-server
   ghc-options: -Wall -Wunused-imports
   other-modules:
     FGEFB.Airac
+    FGEFB.HTTP
     FGEFB.LoadPDF
     FGEFB.Provider
     FGEFB.Providers

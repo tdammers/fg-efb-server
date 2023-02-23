@@ -12,14 +12,11 @@ import Control.Monad.Reader
 import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (mapMaybe, fromMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Text.IO as Text
-import qualified Network.HTTP.Conduit as HTTP
-import qualified Network.HTTP.Simple as HTTP
-import qualified Network.HTTP.Types as HTTP
 import Network.HTTP.Types.URI (urlEncode, urlDecode)
 import qualified Text.HTML.DOM as HTML
 import Text.Megaparsec (SourcePos, sourcePosPretty)
@@ -32,6 +29,7 @@ import FGEFB.Regex
 import FGEFB.URL (renderURLText, parseURLText, URL (..), normalizeURL)
 import FGEFB.Util
 import FGEFB.XmlUtil
+import FGEFB.HTTP
 import Language.ScrapeScript.AST
 
 -- * Runtime errors
@@ -630,76 +628,12 @@ apply f arg =
 -- * Workhorses
 
 fetchHTML :: forall p. Text -> Interpret p (Val p)
-fetchHTML urlInitial =
-  go urlInitial 12
-
-  where
-    responseDict :: Text -> XML.Document -> Text -> Val p
-    responseDict url doc body =
+fetchHTML urlInitial = do
+  (url, body) <- liftIO $ httpCachedGET urlInitial
+  let doc = HTML.parseLBS body
+  return $ 
       dictV
         [ ("url", either (const $ StringV url) UrlV $ parseURLText url)
         , ("dom", XmlV . XML.NodeElement . XML.documentRoot $ doc)
-        , ("body", StringV body)
+        , ("body", StringV (decodeUtf8 $ LBS.toStrict body))
         ]
-
-    go :: Text -> Int -> Interpret p (Val p)
-    go _url 0 =
-      throwRuntimeError "Maximum redirect count exceeded"
-    go url n = do
-      liftIO $ printf "HTTP GET %s\n" url
-      rq <- HTTP.parseRequest (Text.unpack url)
-      rp <- HTTP.httpLBS rq { HTTP.redirectCount = 0 }
-      liftIO $ printf "HTTP %i %s\n"
-        (HTTP.getResponseStatusCode rp)
-        (decodeUtf8 . HTTP.statusMessage $ HTTP.getResponseStatus rp)
-      if HTTP.getResponseStatusCode rp `elem` redirectCodes then do
-        let mlocation = lookup "Location" $ HTTP.getResponseHeaders rp
-        case mlocation of
-          Nothing ->
-            throwRuntimeError "Missing location header"
-          Just location -> do
-            liftIO $ printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
-            urlLeft <- either throwRuntimeError return (parseURLText url)
-            urlRight <- either throwRuntimeError return (parseURLText (decodeUtf8 location))
-            let url' = renderURLText $ urlLeft <> urlRight
-            if url' == url then
-              throwRuntimeError $ "Infinite redirection (location): " <> show url
-            else do
-              go url' (n - 1)
-      else do
-        let body = HTTP.getResponseBody rp
-        let document = HTML.parseLBS body
-        metaRefresh <-
-          mapM (combineURLs url) .
-          mapMaybe (parseMetaRefresh . mconcat . XML.attribute "content") .
-          jqQuery ("meta[http-equiv=Refresh]" :: Text) .
-          XML.fromDocument $
-          document
-        case metaRefresh of
-          url':_ -> do
-            liftIO $ printf "Redirecting due to meta refresh: %s\n" url'
-            if url' == url then
-              throwRuntimeError $ "Infinite redirection (meta refresh): " <> show url
-            else
-              go url' (n - 1)
-          [] -> do
-            return $ responseDict url document (decodeUtf8 $ LBS.toStrict body)
-      where
-        redirectCodes = [301, 302, 303, 307, 308]
-        parseMetaRefresh :: Text -> Maybe Text
-        parseMetaRefresh content =
-          let parts = map Text.strip $ Text.splitOn ";" content
-          in case parts of
-            (_ : redirectUrl : _) ->
-              if "url=" `Text.isPrefixOf` redirectUrl then
-                Just $ Text.drop 4 url
-              else
-                Nothing
-            _ ->
-              Nothing
-
-combineURLs :: Text -> Text -> Interpret p Text
-combineURLs current new = do
-  currentURL <- readURL current
-  newURL <- readURL new
-  return $ renderURLText (currentURL <> newURL)
