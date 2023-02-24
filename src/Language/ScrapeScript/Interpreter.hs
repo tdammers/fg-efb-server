@@ -104,6 +104,8 @@ defVars = Map.fromList
   , ("slice", BuiltinV SliceB)
   , ("keys", BuiltinV KeysB)
   , ("elems", BuiltinV ElemsB)
+  , ("cons", BuiltinV ConsB)
+  , ("snoc", BuiltinV SnocB)
 
   ---- HTTP ----
   , ("HTTP", dictV
@@ -529,6 +531,18 @@ apply f arg =
         DictV m ->
           return $ ListV $ Map.elems m
         x -> throwTypeError "container" x
+
+    BuiltinV ConsB -> do
+      args <- asList arg
+      x <- args `nth` 0
+      xs <- args `nth` 1 >>= asList
+      return $ ListV $ x : xs
+
+    BuiltinV SnocB -> do
+      args <- asList arg
+      xs <- args `nth` 0 >>= asList
+      let ys = tail args
+      return $ ListV $ xs ++ ys
 
     BuiltinV IndexB -> do
       args <- asList arg

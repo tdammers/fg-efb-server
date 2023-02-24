@@ -6,7 +6,7 @@
     <head>
         <link rel="stylesheet" href="/static/style.css"/>
     </head>
-    <body> 
+    <body lang="en-US"> 
         <xsl:if test="error">
             <h1>Error</h1>
             <div class="error">
@@ -20,7 +20,10 @@
                     <xsl:attribute name="href">
                         <xsl:value-of select="path" />
                     </xsl:attribute>
-                    <xsl:value-of select="name" />
+                    <img src="/static/icons/folder.png" />
+                    <div>
+                        <xsl:value-of select="name" />
+                    </div>
                 </a>
             </li>
         </xsl:for-each>
@@ -30,7 +33,10 @@
                     <xsl:attribute name="href">
                         <xsl:value-of select="path" />
                     </xsl:attribute>
-                    <xsl:value-of select="name" />
+                    <img src="/static/icons/chart.png" />
+                    <div>
+                        <xsl:value-of select="name" />
+                    </div>
                 </a>
             </li>
         </xsl:for-each>

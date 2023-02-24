@@ -10,6 +10,7 @@ import Control.Exception
 import Control.Monad (forM_)
 import qualified Data.Aeson as JSON
 import Data.Bool (bool)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Cache (Cache, newCache)
 import qualified Data.Cache as Cache
@@ -25,9 +26,15 @@ import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.IO as LText
 import Data.Time (UTCTime (..), getCurrentTime)
 import qualified Data.Yaml as YAML
+import Debug.Trace
 import qualified Network.HTTP.Types as HTTP
 import Network.Wai as Wai
-import System.Directory (doesFileExist, XdgDirectory (..), getXdgDirectory, getAppUserDataDirectory)
+import System.Directory
+          ( doesFileExist
+          , XdgDirectory (..)
+          , getXdgDirectory
+          , getAppUserDataDirectory
+          )
 import System.Environment (setEnv, lookupEnv)
 import System.FilePath ( (</>) )
 import System.IO (hPutStrLn, stderr)
@@ -76,6 +83,14 @@ styleCSS = do
   Scotty.setHeader "Content-Type" "text/css"
   Scotty.raw $ LBS.fromStrict $(embedFile "./static/style.css")
 
+icons :: Map FilePath ByteString
+icons = Map.fromList $(embedDir "./static/icons")
+
+iconPNG :: FilePath -> Scotty.ActionM ()
+iconPNG iconName = do
+  Scotty.setHeader "Content-Type" "image/png"
+  Scotty.raw =<< maybe (Scotty.liftAndCatchIO (putStrLn $ "Icon not found: " ++ iconName) >> Scotty.next) (return . LBS.fromStrict) (Map.lookup iconName icons)
+
 app :: Cache Text [FileInfo] -> Provider -> ScottyM ()
 app listingCache provider = do
   Scotty.defaultHandler $ \err -> do
@@ -84,9 +99,7 @@ app listingCache provider = do
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
       XML.Element
         "error"
-        (Map.fromList
-          []
-        )
+        Map.empty
         [ XML.NodeContent "Something went wrong." ]
         -- [ XML.NodeContent (LText.toStrict err) ]
 
@@ -98,6 +111,10 @@ app listingCache provider = do
   Scotty.get "/static/style.xsl" styleXSL
   Scotty.get "/static/error.png" errorPNG
   Scotty.get "/static/notfound.png" notfoundPNG
+  Scotty.get "/static/icons/:icon" $ do
+    iconName <- Scotty.param "icon"
+    iconPNG iconName
+      
 
   -- directory listings
   Scotty.get (Scotty.function captureListing) $ do
@@ -226,6 +243,7 @@ runServer = do
   airacs <- loadFirstConfigFileOrElse [] "airac.yaml" :: IO [Airac]
   today <- utctDay <$> getCurrentTime
   let airacMay = findCurrentAiracOn today airacs
+  traceShowM (Map.keys icons)
   defs <- case airacMay of
     Nothing -> do
       putStrLn "Warning: current AIRAC not found"

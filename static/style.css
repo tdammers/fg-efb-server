@@ -1,9 +1,26 @@
 html {
     font-family: sans-serif;
+    font-size: 10pt;
 }
 
 .listing {
-    list-style: disc;
+    list-style: none;
+    display: inline;
+    padding: 0;
+    margin: 0;
+}
+
+.listing li {
+    display: inline-block;
+    vertical-align: top;
+    padding: 0.25rem;
+    text-align: center;
+    width: 8rem;
+    overflow: hidden;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-line;
+    hyphens: auto;
 }
 
 .listing>.file,

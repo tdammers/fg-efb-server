@@ -1,0 +1,62 @@
+do {
+  collapsePath <- (path) -> do {
+    fold(concat, map((a) -> "/" ~ a, path))[1:]
+  };
+
+  notNull <- (val) -> case (val) {
+    null -> true;
+    _ -> false
+  };
+
+  startPath <- URL.parse("/html/belgocontrol_static/eaip/eAIP_Main/html/eAIP/EB-menu-en-GB.html");
+
+  case (pathStr) {
+    "" -> do {
+      url <- pathURL ~ startPath;
+      rp <- HTTP.get(url);
+      links <- rp.dom.query("#ADdetails .H3 a[href!=\"#\"][id^=\"AD-2\"]");
+      map((link) -> do {
+        hrefUrlStr <- link.attr("href")[0];
+        hrefUrl <- URL.parse(hrefUrlStr);
+        linkUrl <- url ~ hrefUrl;
+        linkUrlRel <- linkUrl.relative;
+        path <- collapsePath(linkUrl.path);
+        {
+          "type": "dir",
+          "name": replace("\160", "\n", link.text),
+          "path": path
+        }
+      }, links)
+    };
+
+    other -> do {
+      rp <- HTTP.get(pathURL);
+      linkRows <- rp.dom.query("div[id$=\"2.24\"] tbody[id^=\"AD\"]>tr");
+      go <- (rows) -> case (rows) {
+        [a, b, rest...] -> do {
+            label <- a.query("td")[1];
+            case (b.query("a[href]:not([href^=\"mailto:\"])")) {
+                [anchor, ...] -> do {
+                    hrefUrlStr <- anchor.attr("href")[0];
+                    hrefUrl <- URL.parse(hrefUrlStr);
+                    linkUrl <- pathURL ~ hrefUrl;
+                    linkUrlRel <- linkUrl.relative;
+                    path <- collapsePath(linkUrl.path);
+                    link <- {
+                      "type": "pdf",
+                      "name": replace("\160", "\n", label.text),
+                      "path": path
+                    };
+                    rhs <- go(rest);
+                    cons(link, rhs)
+                };
+                _ -> go(rest)
+            }
+        };
+        _ -> []
+      };
+      go(linkRows)
+    }
+  }
+}
+

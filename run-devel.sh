@@ -2,6 +2,7 @@ CACHE_DIR=./cache \
     ghcid \
     --test Main.main \
     --reload=providers.yaml \
+    --reload=provider-scripts \
     --restart=fg-efb-server.cabal \
     --restart=cabal.project \
     --restart=static/style.xsl \

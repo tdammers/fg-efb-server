@@ -116,6 +116,8 @@ data Builtin
   | SliceB
   | KeysB
   | ElemsB
+  | ConsB
+  | SnocB
 
   ---- HTTP ----
   | HttpGetB
