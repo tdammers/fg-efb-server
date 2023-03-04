@@ -1,0 +1,67 @@
+do {
+  collapsePath <- (path) -> do {
+    fold(concat, map((a) -> "/" ~ a, path))[1:]
+  };
+
+  case (pathStr) {
+    "" -> do {
+      rp <- HTTP.get(pathURL ~ URL.parse("/informatie-voor-luchtvarenden/publicaties-voor-luchtvarenden"));
+
+      [link, ...] <- rp.dom.query("a[title=eAIP]");
+      relUrl <- URL.parse(link.attr("href")[0]);
+      url <- rp.url ~ relUrl;
+      rp <- HTTP.get(url);
+
+      frame <- rp.dom.query("frame")[0];
+      url <- rp.url ~ URL.parse(frame.attr("src")[0]);
+      rp <- HTTP.get(url);
+
+      frame <- rp.dom.query("frame[name=eAISMenuFrameset]")[0];
+      url <- rp.url ~ URL.parse(frame.attr("src")[0]);
+      rp <- HTTP.get(url);
+
+      frame <- rp.dom.query("frame[name=eAISMenuContent]")[0];
+      url <- rp.url ~ URL.parse(frame.attr("src")[0]);
+      rp <- HTTP.get(url);
+
+      airportSections <- rp.dom.query("div.level[id^='AD-2.'][id$='details']");
+      map((aps) -> do {
+        [link, ...] <- aps.query("a[id$='2.24']");
+        title <- 
+          replace(/\160.*/, "",
+          replace(/AD\160\&2.24 /, "", link.text));
+        hrefUrlStr <- link.attr("href")[0];
+        hrefUrl <- URL.parse(hrefUrlStr);
+        linkUrl <- url ~ hrefUrl;
+        path <- URL.encode(toString(linkUrl));
+        Debug.log(linkUrl, path);
+        {
+          "type": "dir",
+          "name": title,
+          "path": path
+        }
+      }, airportSections)
+    };
+
+    other -> do {
+      rp <- HTTP.get(pathURL);
+      linkRows <- rp.dom.query("div[id$='2.24']>table>tbody>tr");
+      map((linkRow) -> do {
+        Debug.log(linkRow);
+        link <- linkRow.query("a[href]")[0];
+        labelTD <- linkRow.query("td")[0];
+        hrefUrlStr <- link.attr("href")[0];
+        hrefUrl <- URL.parse(hrefUrlStr);
+        linkUrl <- pathURL ~ hrefUrl;
+        linkUrlRel <- linkUrl.relative;
+        path <- URL.encode(toString(linkUrl));
+        {
+          "type": "pdf",
+          "name": labelTD.text,
+          "path": path
+        }
+      }, linkRows)
+    }
+  }
+}
+

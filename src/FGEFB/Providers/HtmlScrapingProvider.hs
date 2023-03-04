@@ -14,9 +14,6 @@ import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Vector as Vector
 import Network.HTTP.Base (urlEncode, urlDecode)
-import qualified Network.HTTP.Conduit as HTTP
-import qualified Network.HTTP.Simple as HTTP
-import qualified Network.HTTP.Types as HTTP
 import System.FilePath (takeBaseName)
 import Text.Casing as Casing
 import qualified Text.HTML.DOM as HTML
@@ -30,6 +27,7 @@ import FGEFB.Regex
 import FGEFB.URL (renderURLText, parseURLText, URL (..), normalizeURL)
 import FGEFB.Util
 import FGEFB.XmlUtil
+import FGEFB.HTTP (httpGET)
 
 data ExtractionOf t =
   Extraction
@@ -275,62 +273,10 @@ makeHostRelative :: URL -> URL
 makeHostRelative url = url { urlHostName = Nothing, urlProtocol = Nothing }
 
 fetchListing :: Text -> IO (Text, XML.Document)
-fetchListing url = go url 12
-  where
-    go :: Text -> Int -> IO (Text, XML.Document)
-    go _ 0 = error "Maximum redirect count exceeded"
-    go currentUrl n = do
-      printf "HTTP GET %s\n" url
-      rq <- HTTP.parseRequest (Text.unpack currentUrl)
-      rp <- HTTP.httpLBS rq { HTTP.redirectCount = 0 }
-      printf "HTTP %i %s\n"
-        (HTTP.getResponseStatusCode rp)
-        (decodeUtf8 . HTTP.statusMessage $ HTTP.getResponseStatus rp)
-      if HTTP.getResponseStatusCode rp `elem` redirectCodes then do
-        let mlocation = lookup "Location" $ HTTP.getResponseHeaders rp
-        case mlocation of
-          Nothing ->
-            error "Missing location header"
-          Just location -> do
-            printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
-            let redirectUrl = renderURLText $
-                        either error id (parseURLText currentUrl) <>
-                        either error id (parseURLText (decodeUtf8 location))
-            if redirectUrl == currentUrl then
-              error "Infinite redirection"
-            else do
-              go currentUrl (n - 1)
-      else do
-        let document = HTML.parseLBS . HTTP.getResponseBody $ rp
-            metaRefresh =
-              map (combineURLs currentUrl) .
-              catMaybes .
-              map (parseMetaRefresh . mconcat . XML.attribute "content") .
-              jqQuery ("meta[http-equiv=Refresh]" :: Text) .
-              XML.fromDocument $
-              document
-        case metaRefresh of
-          redirectUrl:_ -> do
-            printf "Redirecting due to meta refresh: %s\n" redirectUrl
-            if redirectUrl == currentUrl then
-              error "Infinite redirection"
-            else
-              go redirectUrl (n - 1)
-          [] -> do
-            return $ (currentUrl, document)
-      where
-        redirectCodes = [301, 302, 303, 307, 308]
-        parseMetaRefresh :: Text -> Maybe Text
-        parseMetaRefresh content =
-          let parts = map Text.strip $ Text.splitOn ";" content
-          in case parts of
-            (_ : redirectUrl : _) ->
-              if "url=" `Text.isPrefixOf` redirectUrl then
-                Just $ Text.drop 4 redirectUrl
-              else
-                Nothing
-            _ ->
-              Nothing
+fetchListing url = do
+  (url', rawBody) <- httpGET url
+  let document = HTML.parseLBS rawBody
+  return (url', document)
 
 for :: [a] -> (a -> b) -> [b]
 for = flip map

@@ -113,6 +113,7 @@ httpGET urlInitial = do
             printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
             urlLeft <- either throwHTTPError return (parseURLText url)
             urlRight <- either throwHTTPError return (parseURLText (decodeUtf8 location))
+            printf "%s -> %s\n" (show urlLeft) (show urlRight)
             let url' = renderURLText $ urlLeft <> urlRight
             if url' == url then
               throwHTTPError $ "Infinite redirection (location): " <> show url

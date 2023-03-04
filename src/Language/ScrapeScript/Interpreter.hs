@@ -455,7 +455,8 @@ apply f arg =
         [] -> return $ IntV 1
         x:xs -> return $ IntV $ x `div` product xs
     BuiltinV ToStringB -> do
-      return $ StringV $ stringify arg
+      args <- asList arg
+      return $ StringV . Text.concat $ map stringify args
     BuiltinV ToBoolB -> do
       return $ BoolV $ truthy arg
     BuiltinV ToIntB -> do
