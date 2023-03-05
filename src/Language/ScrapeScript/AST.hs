@@ -100,6 +100,14 @@ data Builtin
   | DiffB
   | QuotientB
 
+  ---- Comparison ----
+  | EqualsB
+  | NotEqualsB
+  | LessB
+  | GreaterB
+  | NotLessB
+  | NotGreaterB
+
   ---- Coercions ----
   | ToStringB
   | ToBoolB

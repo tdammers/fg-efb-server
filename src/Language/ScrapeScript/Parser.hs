@@ -37,6 +37,9 @@ symbol = void . L.symbol whitespace
 keyword :: Text -> Parser ()
 keyword kw = void . try $ string kw <* notFollowedBy (satisfy isIdent) <* whitespace
 
+operator :: Text -> Parser ()
+operator kw = void . try $ string kw <* notFollowedBy (satisfy isOperator) <* whitespace
+
 parentheses :: Parser a -> Parser a
 parentheses = between (symbol "(") (symbol ")")
 
@@ -72,14 +75,14 @@ nonLetExpr =
     [ doExpr
     , caseExpr
     , lamExpr
-    , additiveExpr
+    , comparisonExpr
     ]
 
 letBinding :: Parser (Expr SourcePos -> Expr SourcePos)
 letBinding =
   LetE
     <$> getSourcePos
-    <*> try (pat <* whitespace <* symbol "<-")
+    <*> try (pat <* whitespace <* operator "<-")
     <*> expr
 
 letExpr :: Parser (Expr SourcePos)
@@ -90,7 +93,7 @@ lamExpr :: Parser (Expr SourcePos)
 lamExpr =
   LamE
     <$> getSourcePos
-    <*> try (parentheses patList <* symbol "->")
+    <*> try (parentheses patList <* operator "->")
     <*> expr
 
 identifier :: Parser Text
@@ -102,6 +105,9 @@ isIdentInitial c = isAlpha c || c == '_'
 
 isIdent :: Char -> Bool
 isIdent c = isAlphaNum c || c == '_'
+
+isOperator :: Char -> Bool
+isOperator c = not $ isAlphaNum c || isSpace c
 
 listExpr :: Parser (Expr SourcePos)
 listExpr =
@@ -132,8 +138,8 @@ caseExpr = do
 caseBranch :: Parser (Pat SourcePos, [Expr SourcePos], Expr SourcePos)
 caseBranch = do
   branchPat <- pat
-  guards <- option [] $ symbol "|" *> expr `sepBy` symbol ","
-  symbol "->"
+  guards <- option [] $ operator "|" *> expr `sepBy` symbol ","
+  operator "->"
   branchBody <- expr
   return (branchPat, guards, branchBody)
 
@@ -235,21 +241,33 @@ binaryTail rhsP operations = do
     | (operatorP, operation) <- operations
     ]
 
+comparisonExpr :: Parser (Expr SourcePos)
+comparisonExpr =
+  binaryExpr
+    additiveExpr
+    [ (operator "==", EqualsB)
+    , (operator "!=", NotEqualsB)
+    , (operator "<=", NotGreaterB)
+    , (operator ">=", NotLessB)
+    , (operator "<", LessB)
+    , (operator ">", GreaterB)
+    ]
+
 additiveExpr :: Parser (Expr SourcePos)
 additiveExpr =
   binaryExpr
     multiplicativeExpr
-    [ (symbol "+", SumB)
-    , (symbol "-", DiffB)
-    , (symbol "~", ConcatB)
+    [ (operator "+", SumB)
+    , (operator "-", DiffB)
+    , (operator "~", ConcatB)
     ]
 
 multiplicativeExpr :: Parser (Expr SourcePos)
 multiplicativeExpr =
   binaryExpr
     applicativeExpr
-    [ (symbol "*", ProductB)
-    , (symbol "/", QuotientB)
+    [ (operator "*", ProductB)
+    , (operator "/", QuotientB)
     ]
 
 applicativeExpr :: Parser (Expr SourcePos)

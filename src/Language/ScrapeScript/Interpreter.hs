@@ -454,6 +454,18 @@ apply f arg =
       case operands of
         [] -> return $ IntV 1
         x:xs -> return $ IntV $ x `div` product xs
+
+    BuiltinV EqualsB -> do
+      operands <- asList arg
+      case operands of
+        [x,y] -> return $ BoolV (x == y)
+        _ -> throwRuntimeError "Invalid arguments"
+    BuiltinV NotEqualsB -> do
+      operands <- asList arg
+      case operands of
+        [x,y] -> return $ BoolV (x /= y)
+        _ -> throwRuntimeError "Invalid arguments"
+
     BuiltinV ToStringB -> do
       args <- asList arg
       return $ StringV . Text.concat $ map stringify args

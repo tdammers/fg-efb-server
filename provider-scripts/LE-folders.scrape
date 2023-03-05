@@ -1,0 +1,48 @@
+do {
+  collapsePath <- (path) -> do {
+    fold(concat, map((a) -> "/" ~ a, path))[1:]
+  };
+
+  case (pathStr) {
+    "" -> do {
+      rp <- HTTP.get(pathURL);
+      linkRows <- rp.dom.query("table.enlaces tr:has(td.id)");
+
+      filter((x) -> match(/^[A-Z]{4}$/, x.path),
+      map((linkRow) -> do {
+        id <- linkRow.query("td.id")[0].text;
+        desc <- linkRow.query("td.desc")[0].text;
+        {
+          "type": "dir",
+          "name": id ~ " - " ~ replace("/", " / ", desc),
+          "path": id
+        }
+      }, linkRows))
+    };
+
+    other -> do {
+      rp <- HTTP.get(URL.parse("/AIP/AIP-en.html"));
+      linkRows <- rp.dom.query("table.enlaces tr:has(td.iconos):has(a[href$='.pdf'])");
+      filter((x) -> x != null,
+        map((linkRow) -> do {
+            link <- linkRow.query("a[href$='.pdf']")[0];
+            attr <- link.attr("href")[0];
+            apname <- replace(/^contenido_AIP\/AD\/AD2\/([A-Z]{4})\/.*$/, "$1",
+                      attr);
+            case (null) {
+                _ | (apname == pathStr) -> do {
+                    id <- linkRow.query("td.id")[0].text;
+                    desc <- linkRow.query("td.desc")[0].text;
+                    {
+                      "type": "pdf",
+                      "name": desc,
+                      "path": URL.parse(attr)
+                    }
+                };
+                _ -> null
+            }
+        },
+        linkRows))
+    }
+  }
+}
