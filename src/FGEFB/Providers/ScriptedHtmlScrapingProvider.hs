@@ -20,7 +20,7 @@ import Text.Megaparsec.Pos (SourcePos (..), initialPos, unPos)
 import Language.ScrapeScript.AST
 import Language.ScrapeScript.Interpreter
 
-import FGEFB.LoadPDF
+import FGEFB.HTTP (downloadHttp)
 import FGEFB.Provider
 import FGEFB.URL (renderURLText, parseURLText, URL (..))
 
@@ -42,7 +42,7 @@ scriptedHtmlScrapingProvider
     docScriptFilename docScriptSrc docScript =
   Provider
     { label = mlabel
-    , getPdfPage = \pathEnc page -> do
+    , getPdf = \pathEnc -> do
         let pathText = unpackParam pathEnc
             pathURL = either (const NullV) UrlV $ parseURLText . unpackParam $ pathEnc
             extraVars = [("pathURL", pathURL), ("pathStr", StringV pathText)] 
@@ -52,7 +52,7 @@ scriptedHtmlScrapingProvider
                       extraVars
                       docScriptSrc
                       docScript
-        loadPdfPageHttp (renderURLText $ rootURL <> localURL) page
+        Just <$> downloadHttp (renderURLText $ rootURL <> localURL) ".pdf"
     , listFiles = \pathEnc -> do
         let pathText = unpackParam pathEnc
             pathURL = either (const NullV) UrlV $ parseURLText . unpackParam $ pathEnc

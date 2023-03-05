@@ -22,7 +22,8 @@ extra-source-files: static/style.css
 
 executable fg-efb-server
   main-is: Main.hs
-  ghc-options: -Wall -Wunused-imports
+  -- ghc-options: -Wall -Wunused-imports
+  ghc-options: -Wall -Wno-error -Wno-unused-imports
   other-modules:
     FGEFB.Airac
     FGEFB.HTTP

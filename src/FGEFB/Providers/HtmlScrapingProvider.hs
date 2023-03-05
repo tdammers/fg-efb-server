@@ -27,7 +27,7 @@ import FGEFB.Regex
 import FGEFB.URL (renderURLText, parseURLText, URL (..), normalizeURL)
 import FGEFB.Util
 import FGEFB.XmlUtil
-import FGEFB.HTTP (httpGET)
+import FGEFB.HTTP (httpGET, downloadHttp)
 
 data ExtractionOf t =
   Extraction
@@ -204,15 +204,15 @@ htmlScrapingProvider :: ProviderContext
 htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSpecs documentSpecs =
   Provider
     { label = mlabel
-    , getPdfPage = \filenameEnc page -> do
+    , getPdf = \filenameEnc -> do
         let filename = urlDecode . Text.unpack $ filenameEnc
-            localURL = either error id . parseURLText . Text.pack $ filename
-        loadPdfPageHttp (renderURLText $ rootURL <> localURL) page
+        let localURL = either error id . parseURLText . Text.pack $ filename
+        Just <$> downloadHttp (renderURLText $ rootURL <> localURL) ".pdf"
     , listFiles = \pathEnc -> do
         let go :: Text -> IO [FileInfo]
             go path = do
               let actualPath = if Text.null path then landingPath else path
-                  actualURL = normalizeURL . either error id . parseURLText $ actualPath
+              let actualURL = normalizeURL . either error id . parseURLText $ actualPath
               (parentPath, document) <- fetchListing (renderURLText $ rootURL <> actualURL)
               let currentURL = either error id $ parseURLText parentPath
               let root = XML.fromDocument document

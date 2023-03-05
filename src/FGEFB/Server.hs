@@ -50,6 +50,7 @@ import FGEFB.Providers
 import FGEFB.Providers.GroupProvider
 import FGEFB.Providers.LocalFileProvider
 import FGEFB.XmlUtil
+import FGEFB.LoadPDF
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
@@ -57,10 +58,18 @@ captureListing rq =
     "api":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ -> Nothing
 
-capturePDF :: Wai.Request -> Maybe [Scotty.Param]
-capturePDF rq =
+captureRenderedPage :: Wai.Request -> Maybe [Scotty.Param]
+captureRenderedPage rq =
   case filter (not . Text.null) (Wai.pathInfo rq) of
-    "files":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
+    "files":pathItems ->
+      Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
+    _ ->
+      Nothing
+
+captureRawFile :: Wai.Request -> Maybe [Scotty.Param]
+captureRawFile rq =
+  case filter (not . Text.null) (Wai.pathInfo rq) of
+    "raw":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ -> Nothing
 
 errorPNG :: Scotty.ActionM ()
@@ -125,18 +134,31 @@ app listingCache provider = do
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
       xmlFileList files
 
-  -- PDF pages
-  Scotty.get (Scotty.function capturePDF) $ do
+  -- Pages rendered to JPG
+  Scotty.get (Scotty.function captureRenderedPage) $ do
     filename <- Scotty.param "path"
     page <- Scotty.param "p" `Scotty.rescue` const (return 0)
-    mbody <- Scotty.liftAndCatchIO $ getPdfPage provider filename page
-    case mbody of
-      Nothing -> do
-        Scotty.status HTTP.notFound404
-        notfoundPNG
-      Just body -> do
-        Scotty.setHeader "Content-type" "image/jpeg"
-        Scotty.raw body
+    ty <- Scotty.param "t" `Scotty.rescue` const (return "jpg")
+
+    pdfFilenameMaybe <- Scotty.liftAndCatchIO $ getPdf provider filename
+    pdfFilename <- maybe Scotty.next return $ pdfFilenameMaybe
+
+    case ty :: Text of
+      "jpg" -> do
+        mbody <- Scotty.liftAndCatchIO $ loadPdfPage pdfFilename page
+        case mbody of
+          Nothing -> Scotty.next
+          Just body -> do
+            Scotty.setHeader "Content-type" "image/jpeg"
+            Scotty.raw body
+      "pdf" -> do
+        Scotty.setHeader "Content-type" "application/pdf"
+        Scotty.file pdfFilename
+      _ -> Scotty.next
+
+  Scotty.get (Scotty.function captureRenderedPage) $ do
+    Scotty.status HTTP.notFound404
+    notfoundPNG
 
   where
     cached :: (Eq k, Hashable k) => Cache k v -> k -> IO v -> IO v

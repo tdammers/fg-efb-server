@@ -31,7 +31,7 @@
             <li class="file">
                 <a>
                     <xsl:attribute name="href">
-                        <xsl:value-of select="path" />
+                        <xsl:value-of select="path" /><xsl:text>?t=pdf</xsl:text>
                     </xsl:attribute>
                     <img src="/static/icons/chart.png" />
                     <div>

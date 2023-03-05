@@ -12,7 +12,7 @@ import qualified Network.HTTP.Simple as HTTP
 import System.FilePath (takeBaseName)
 import Text.Read (readMaybe)
 
-import FGEFB.LoadPDF
+import FGEFB.HTTP (downloadHttp)
 import FGEFB.Provider
 import FGEFB.Util
 
@@ -72,7 +72,7 @@ navaidJsonProvider mlabel urlPattern =
         entries <- getEntries mparentID urlPattern
         print entries
         return $ map entryToFileInfo entries
-    , getPdfPage = \filename page -> do
+    , getPdf = \filename -> do
         case Text.splitOn "/" filename of
           [parentStr, childStr] -> do
             parentID <- maybe (error "Invalid parentID") return . readMaybe . Text.unpack $ parentStr
@@ -80,7 +80,7 @@ navaidJsonProvider mlabel urlPattern =
             entries <- getEntries (Just parentID) urlPattern
             case filter (\e -> entry_id e == childID) entries of
               [Entry { entry_href = Just href }] -> do
-                loadPdfPageHttp href page
+                Just <$> downloadHttp href ".pdf"
               _ -> error "Not found"
           _ -> error "Not found"
     }

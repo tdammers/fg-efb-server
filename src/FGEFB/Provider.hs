@@ -54,7 +54,7 @@ data Provider =
   Provider
     { label :: Maybe Text
     , listFiles :: Text -> IO [FileInfo]
-    , getPdfPage :: Text -> Int -> IO (Maybe LBS.ByteString)
+    , getPdf :: Text -> IO (Maybe FilePath)
     }
 
 data FileInfo =

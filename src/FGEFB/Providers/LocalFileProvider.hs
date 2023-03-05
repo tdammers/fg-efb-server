@@ -43,8 +43,8 @@ localFileProvider mlabel rootDir =
         let dirname = Text.unpack dirnameT
         listDirectory (rootDir </> dirname) >>=
           (fmap catMaybes . mapM (classifyFile rootDir dirname))
-    , getPdfPage = \filename page -> do
-        loadPdfPage (rootDir </> Text.unpack filename) page
+    , getPdf = \filename -> do
+        return . Just $ rootDir </> Text.unpack filename
     }
 
 

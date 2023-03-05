@@ -159,7 +159,7 @@ httpGET urlInitial = do
           in case parts of
             (_ : redirectUrl : _) ->
               if "url=" `Text.isPrefixOf` redirectUrl then
-                Just $ Text.drop 4 url
+                Just $ Text.drop 4 redirectUrl
                 else
                   Nothing
             _ ->
