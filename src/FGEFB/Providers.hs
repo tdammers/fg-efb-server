@@ -10,6 +10,7 @@ import FGEFB.Providers.LocalFileProvider
 import FGEFB.Providers.NavaidJsonProvider
 import FGEFB.Providers.HtmlScrapingProvider
 import FGEFB.Providers.ScriptedHtmlScrapingProvider
+import FGEFB.Providers.LuaProvider
 
 import Language.ScrapeScript.Parser
 
@@ -35,6 +36,10 @@ instance JSON.FromJSON ProviderFactory where
             ProviderFactory . const . return . localFileProvider label <$> obj .: "path"
           "navaid" ->
             ProviderFactory . const . return . navaidJsonProvider label <$> obj .: "template"
+          "lua" -> do
+            scriptFilename <- obj .: "script"
+            return . ProviderFactory $ \context ->
+              return $ luaProvider context label scriptFilename
           "html" -> do
             root <- obj .: "url"
             landing <- obj .: "start" .!= "/"
