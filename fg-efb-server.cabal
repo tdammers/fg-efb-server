@@ -42,6 +42,9 @@ executable fg-efb-server
     FGEFB.URL
     FGEFB.Util
     FGEFB.XmlUtil
+    FGEFB.Lua.XML
+    FGEFB.Lua.HTTP
+    FGEFB.Lua.Util
     Language.ScrapeScript.AST
     Language.ScrapeScript.Interpreter
     Language.ScrapeScript.Parser
