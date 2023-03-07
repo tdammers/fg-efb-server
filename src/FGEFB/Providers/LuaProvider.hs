@@ -85,6 +85,7 @@ luaProvider
         Lua.openlibs
         Lua.preloadModule moduleXML
         Lua.preloadModule moduleHTTP
+        Lua.preloadModule moduleURL
         Lua.registerHaskellFunction "httpGET" httpGET
         luaThrowStatus $ Lua.dofileTrace scriptFilename
         Lua.getglobal funcname

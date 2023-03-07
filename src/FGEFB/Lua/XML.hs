@@ -162,6 +162,12 @@ typeXMLElement =
         <#> udparam typeXMLElement "element" "object"
         <#> parameter peekText "string" "nameStr" "unqualified attribute name"
         =#> functionResult (pushMaybe push) "string" "attribute value"
+    , method $ defun "query"
+        ### liftPure2 (\e selectorStr ->
+              jqQuery selectorStr (XML.fromNode (XML.NodeElement e)))
+        <#> udparam typeXMLElement "element" "object"
+        <#> parameter peekText "string" "selector" "CSS selector"
+        =#> functionResult (pushList push) "list" "query results"
     ]
 
 instance Pushable XML.Element where
@@ -229,6 +235,13 @@ typeXMLNode =
         <#> udparam typeXMLNode "node" "object"
         <#> parameter peekText "string" "nameStr" "unqualified attribute name"
         =#> functionResult (pushMaybe push) "string" "attribute value"
+
+    , method $ defun "query"
+        ### liftPure2 (\n selectorStr ->
+              jqQuery selectorStr (XML.fromNode n))
+        <#> udparam typeXMLNode "node" "object"
+        <#> parameter peekText "string" "selector" "CSS selector"
+        =#> functionResult (pushList push) "list" "query results"
     ]
 
 instance Pushable XML.Node where
@@ -287,7 +300,6 @@ typeXMLDocument =
         <#> udparam typeXMLDocument "document" "object"
         <#> parameter peekText "string" "selector" "CSS selector"
         =#> functionResult (pushList push) "list" "query results"
-
     ]
 
 instance Pushable XML.Document where
