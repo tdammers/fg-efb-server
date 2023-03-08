@@ -17,6 +17,9 @@ import FGEFB.Lua.Util
 import FGEFB.HTTP
 import FGEFB.URL
 
+flipPair :: (a, b) -> (b, a)
+flipPair (a, b) = (b, a)
+
 moduleHTTP :: LuaError e => Module e
 moduleHTTP =
   Module
@@ -31,9 +34,14 @@ moduleHTTP =
         <#> parameter peekString "string" "extension" "file extension for cache file"
         =#> functionResult pushString "string" "filename"
     , defun "get"
-        ### (\url -> LBS.toStrict . snd <$> liftIO (httpCachedGET url))
+        ### (\url -> do
+              (finalURL, body) <- liftIO (httpCachedGET url)
+              pushByteString (LBS.toStrict body)
+              pushText finalURL
+              return 2
+            )
         <#> parameter peekText "string" "url" "URL to fetch from"
-        =#> functionResult pushByteString "string" "body"
+        =?> "body, url"
     ]
     -- operations
     []

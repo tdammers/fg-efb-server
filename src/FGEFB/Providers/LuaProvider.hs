@@ -83,6 +83,8 @@ luaProvider
     runLua funcname pathText peeker = do
       luaOutput <- Lua.runEither $ do
         Lua.openlibs
+        Lua.dostring "package.path = './provider-scripts/?.lua'"
+        Lua.dostring "package.cpath = ''"
         Lua.preloadModule moduleXML
         Lua.preloadModule moduleHTTP
         Lua.preloadModule moduleURL
