@@ -20,3 +20,17 @@ function intercalate(strings, sep)
 
     return result
 end
+
+function dumpTable(table, indent)
+    indent = indent or ''
+    print(indent .. "{")
+    for k, v in pairs(table) do
+        if type(v) == 'table' then
+            print(string.format('%s  %s = ', indent, k))
+            dumpTable(v, indent .. "    ")
+        else
+            print(string.format('%s  %s = %q', indent, k, v))
+        end
+    end
+    print(indent .. "}")
+end

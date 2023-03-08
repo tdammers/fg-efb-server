@@ -61,7 +61,7 @@ luaProvider :: ProviderContext
             -> FilePath
             -> Provider
 luaProvider
-    _context
+    context
     mlabel
     scriptFilename =
   Provider
@@ -75,10 +75,6 @@ luaProvider
 
     }
   where
-    httpGET :: Text -> FilePath -> Lua.Lua FilePath
-    httpGET url extension =
-      Lua.liftIO $ downloadHttp url extension
-
     runLua :: Lua.Name -> Text -> Lua.Peeker Lua.Exception a -> IO a
     runLua funcname pathText peeker = do
       luaOutput <- Lua.runEither $ do
@@ -88,7 +84,8 @@ luaProvider
         Lua.preloadModule moduleXML
         Lua.preloadModule moduleHTTP
         Lua.preloadModule moduleURL
-        Lua.registerHaskellFunction "httpGET" httpGET
+        Lua.pushMap Lua.pushText Lua.pushValue (contextDefs context)
+        Lua.setglobal "context"
         luaThrowStatus $ Lua.dofileTrace scriptFilename
         Lua.getglobal funcname
         Lua.push pathText

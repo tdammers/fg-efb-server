@@ -265,7 +265,6 @@ runServer = do
   airacs <- loadFirstConfigFileOrElse [] "airac.yaml" :: IO [Airac]
   today <- utctDay <$> getCurrentTime
   let airacMay = findCurrentAiracOn today airacs
-  traceShowM (Map.keys icons)
   defs <- case airacMay of
     Nothing -> do
       putStrLn "Warning: current AIRAC not found"
