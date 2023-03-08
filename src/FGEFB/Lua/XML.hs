@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module FGEFB.Lua.XML
 where
@@ -14,16 +15,18 @@ import FGEFB.XmlUtil (xmlFragmentToDocumentNoPrologue, textContent, jqQuery)
 
 import qualified Data.ByteString.Lazy as LBS
 import Data.Default (def)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
+import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
 import qualified Text.HTML.DOM as HTML
 import qualified Text.XML as XML
 import qualified Text.XML.Cursor as XML
-import qualified Data.Map as Map
 
-moduleXML :: LuaError e => Module e
+moduleXML :: forall e. LuaError e => Module e
 moduleXML =
   Module
     "xml"
@@ -51,6 +54,10 @@ moduleXML =
         <#> parameter peekText "string" "local" "unqualified local name"
         <#> parameter peekText "string" "namespace" "full XML namespace"
         =#> functionResult push "object" "XML Name"
+    , defun "toname"
+        ### liftPure id
+        <#> parameter (safepeek :: Peeker e XML.Name) "string" "src" "XML Name"
+        =#> functionResult push "object" "XML Name"
     , defun "parseHTML"
         ### liftPure (HTML.parseLBS . LBS.fromStrict)
         <#> parameter peekByteString "string" "src" "HTML source"
@@ -62,10 +69,45 @@ moduleXML =
 renderName :: XML.Name -> Text.Text
 renderName n =
   mconcat
-    [ maybe "" (\ns -> "{" <> ns <> "}") (XML.nameNamespace n)
+    [ "XML.Name("
+    , maybe "" (\ns -> "{" <> ns <> "}") (XML.nameNamespace n)
     , maybe "" (<> ":") (XML.namePrefix n)
     , XML.nameLocalName n
+    , ")"
     ]
+
+typeXMLAttribs :: forall e. LuaError e => DocumentedType e (Map XML.Name Text)
+typeXMLAttribs =
+  deftype "XML Attribs"
+    -- operations
+    [ operation Tostring $ defun "__tostring"
+        ### liftPure show
+        <#> udparam typeXMLAttribs "attributes" "object"
+        =#> functionResult pushString "string" "stringified attribute list"
+    , operation Index $ defun "__index"
+        ### liftPure2 (flip Map.lookup)
+        <#> udparam typeXMLAttribs "self" "object"
+        <#> parameter (safepeek :: Peeker e XML.Name) "object or string" "key" "XML name to look up"
+        =#> functionResult (pushMaybe pushText) "string" "value"
+    , operation Newindex $ defun "__newindex"
+        ### liftPure3 (\m k v -> Map.insert k v m)
+        <#> udparam typeXMLAttribs "self" "object"
+        <#> parameter (safepeek :: Peeker e XML.Name) "object or string" "key" "XML name"
+        <#> parameter peekText "string" "key" "value"
+        =#> functionResult push "object" "new attribute list"
+    ]
+    -- members
+    [ readonly
+        "size"
+        "number of attributes"
+        (pushIntegral, Map.size)
+    ]
+
+pushAttribs :: LuaError e => Pusher e (Map XML.Name Text)
+pushAttribs = pushUD typeXMLAttribs
+
+peekAttribs :: LuaError e => Peeker e (Map XML.Name Text)
+peekAttribs = peekUD typeXMLAttribs
 
 typeXMLName :: LuaError e => DocumentedType e XML.Name
 typeXMLName =
@@ -95,7 +137,11 @@ instance Pushable XML.Name where
   push = pushUD typeXMLName
 
 instance Peekable XML.Name where
-  safepeek = peekUD typeXMLName
+  safepeek =
+    choice
+      [ fmap fromString . peekString
+      , peekUD typeXMLName
+      ]
 
 renderElement :: XML.Element -> Text.Text
 renderElement e =
@@ -121,11 +167,9 @@ renderDocument = renderDocumentWith
     , XML.rsPretty = True
     }
 
-getAttr :: XML.Element -> Text -> Maybe Text
-getAttr e nameStr =
-  Map.lookup
-    (XML.Name nameStr Nothing Nothing)
-    (XML.elementAttributes e)
+getAttr :: XML.Element -> XML.Name -> Maybe Text
+getAttr e name =
+  Map.lookup name (XML.elementAttributes e)
 
 typeXMLElement :: LuaError e => DocumentedType e XML.Element
 typeXMLElement =
@@ -148,7 +192,7 @@ typeXMLElement =
     , readonly
         "attributes"
         "element attributes"
-        (pushMap push pushText, XML.elementAttributes)
+        (pushAttribs, XML.elementAttributes)
     , readonly
         "children"
         "element child nodes"
@@ -160,7 +204,7 @@ typeXMLElement =
     , method $ defun "attr"
         ### liftPure2 getAttr
         <#> udparam typeXMLElement "element" "object"
-        <#> parameter peekText "string" "nameStr" "unqualified attribute name"
+        <#> parameter safepeek "string" "nameStr" "unqualified attribute name"
         =#> functionResult (pushMaybe push) "string" "attribute value"
     , method $ defun "query"
         ### liftPure2 (\e selectorStr ->
@@ -211,7 +255,7 @@ typeXMLNode =
     , readonly
         "attributes"
         "node attributes"
-        (pushMaybe (pushMap push pushText), \case
+        (pushMaybe pushAttribs, \case
           XML.NodeElement e -> Just $ XML.elementAttributes e
           _ -> Nothing
         )
@@ -233,7 +277,7 @@ typeXMLNode =
               _ -> const Nothing
             )
         <#> udparam typeXMLNode "node" "object"
-        <#> parameter peekText "string" "nameStr" "unqualified attribute name"
+        <#> parameter safepeek "string" "nameStr" "unqualified attribute name"
         =#> functionResult (pushMaybe push) "string" "attribute value"
 
     , method $ defun "query"

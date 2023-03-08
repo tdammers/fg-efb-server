@@ -31,6 +31,7 @@ function listFiles(path)
 
     local function follow(query, attr)
         local doc = fetchHTML(currentURL)
+        local node = doc:query(query)[1].node
         local nextURL = doc:query(query)[1].node:attr(attr)
         currentURL = URL.join(currentURL, nextURL)
     end
@@ -58,9 +59,6 @@ function listFiles(path)
                     }
                 )
             end
-        end
-        for k, v in ipairs(result) do
-            print(v["path"])
         end
         return result
     else
