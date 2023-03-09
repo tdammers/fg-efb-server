@@ -28,6 +28,8 @@ function dumpTable(table, indent)
         if type(v) == 'table' then
             print(string.format('%s  %s = ', indent, k))
             dumpTable(v, indent .. "    ")
+        elseif type(v) == 'userdata' then
+            print(string.format('%s %s = %s', indent, k, tostring(v)))
         else
             print(string.format('%s  %s = %q', indent, k, v))
         end
