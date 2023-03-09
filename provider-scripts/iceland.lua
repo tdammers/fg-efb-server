@@ -5,14 +5,14 @@ local URL = require 'url'
 require 'common'
 require 'navigator'
 
-local startURL = 'https://eaip.isavia.is/'
+local rootURL = 'https://eaip.isavia.is/'
 
 function getPDF(path)
-    return HTTP.download(URL.join(startURL, path), ".pdf")
+    return HTTP.download(URL.join(rootURL, path), ".pdf")
 end
 
 function listFiles(path)
-    local navigator = HTTPNavigator:new(startURL)
+    local navigator = HTTPNavigator:new(rootURL)
 
     if path == "" then
         navigator:follow('td.green a', 'href')
