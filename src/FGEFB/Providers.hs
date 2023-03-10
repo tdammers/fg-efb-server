@@ -9,10 +9,7 @@ import FGEFB.Providers.GroupProvider
 import FGEFB.Providers.LocalFileProvider
 import FGEFB.Providers.NavaidJsonProvider
 import FGEFB.Providers.HtmlScrapingProvider
-import FGEFB.Providers.ScriptedHtmlScrapingProvider
 import FGEFB.Providers.LuaProvider
-
-import Language.ScrapeScript.Parser
 
 import qualified Data.Aeson as JSON
 import Data.Aeson ( (.:), (.!=) )
@@ -47,35 +44,6 @@ instance JSON.FromJSON ProviderFactory where
             documentSel <- obj .: "documents"
             return . ProviderFactory $ \context -> 
               return $ htmlScrapingProvider context label root landing folderSel documentSel
-          "html-scripted" -> do
-            root <- obj .: "url"
-            folderSpec <- obj .: "folder"
-            documentSpec <- obj .: "document"
-            return . ProviderFactory $ \context -> do
-              (folderFilename, folderSrc) <- case folderSpec of
-                c | "@" `Text.isPrefixOf` c -> do
-                  let filename = Text.unpack . Text.drop 1 $ c
-                  src <- Text.readFile filename
-                  return (filename, src)
-                c -> do
-                  return ("<<inline:folder>>", c)
-              folderExpr <- parseExprM "folder" folderSrc
-              (documentFilename, documentSrc) <- case documentSpec of
-                c | "@" `Text.isPrefixOf` c -> do
-                  let filename = Text.unpack . Text.drop 1 $ c
-                  src <- Text.readFile filename
-                  return (filename, src)
-                c -> do
-                  return ("<<inline:document>>", c)
-              documentExpr <- parseExprM "document" documentSrc
-              return $ scriptedHtmlScrapingProvider
-                context label root
-                folderFilename
-                folderSrc
-                folderExpr
-                documentFilename
-                documentSrc
-                documentExpr
 
           "group" -> do
             subFactories <- obj .: "providers"

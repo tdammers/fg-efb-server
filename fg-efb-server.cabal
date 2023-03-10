@@ -34,10 +34,8 @@ executable fg-efb-server
     FGEFB.Providers.HtmlScrapingProvider
     FGEFB.Providers.LocalFileProvider
     FGEFB.Providers.NavaidJsonProvider
-    FGEFB.Providers.ScriptedHtmlScrapingProvider
     FGEFB.Providers.LuaProvider
     FGEFB.Regex
-    FGEFB.REPL
     FGEFB.Server
     FGEFB.URL
     FGEFB.Util
@@ -45,9 +43,6 @@ executable fg-efb-server
     FGEFB.Lua.XML
     FGEFB.Lua.HTTP
     FGEFB.Lua.Util
-    Language.ScrapeScript.AST
-    Language.ScrapeScript.Interpreter
-    Language.ScrapeScript.Parser
   -- other-extensions:
   build-depends: base >=4.12 && <5
                , aeson >=1.5.5.1 && <2.2.0.0
