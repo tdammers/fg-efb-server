@@ -87,7 +87,7 @@ downloadHttp url extension = do
 
 httpCachedGET :: Text -> IO (Text, LBS.ByteString)
 httpCachedGET url = do
-  withCacheImmediate url $ httpGET
+  withCacheImmediate url httpGET
 
 httpGET :: Text -> IO (Text, LBS.ByteString)
 httpGET urlInitial = do
