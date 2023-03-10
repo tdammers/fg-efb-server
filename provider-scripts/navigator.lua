@@ -23,8 +23,15 @@ end
 function HTTPNavigator:follow (query, attr)
     local doc = self:fetch()
     local result = doc:query(query)
-    local nextURL = doc:query(query)[1].node:attr(attr)
-    self:go(nextURL)
+    if #result == 0 then
+        print("Query not matched, not navigating anywhere")
+        print(doc)
+        print(query)
+        self.doc = nil
+    else
+        local nextURL = result[1].node:attr(attr)
+        self:go(nextURL)
+    end
     return self
 end
 
