@@ -1,234 +1,191 @@
-K.sky:
-  label: "Kxxx,Pxxx: USA (Skyvector)"
-  type: html
-  url: 'https://skyvector.com'
-  start: '/airports/United+States'
-  folders:
-    - select: '.view-content>.views-summary>a:not([href$="/United%20States/"])'
-    - select: 'td.views-field-title>a'
-      format:
-        - replace: ['&amp;', '&']
-      filter: '^[A-Z][A-Z][A-Z] '
-      sort: label
-  documents:
-    - select: 'div.aptdata>a:has(img)'
-      label:
-        child: 'img'
-        attrib: 'alt'
-    - select: '.aptdata>ul>li.apttpp>a'
-BI:
-  label: "BIxx: Iceland Samgöngustofa"
-  type: html
-  url: 'http://eaip.samgongustofa.is'
-  start: '/'
-  folders:
-    - select: 'td.green>a,h3.toc a'
-      auto-follow: true
-    - select: 'frame[name=eAISNavigation]'
-      href: '@src'
-      label: '@name'
-      auto-follow: true
-    - select: '#AD2013022615250806550004details .H3 a[title]'
-    - select: '#AD2013022615371604540000details .H3 a[title]'
-  documents:
-    - select: 'td div.graphic-box a'
-      format:
-        - 'basename'
-        - split: '-'
-        - split: '_'
-EB:
-  label: "EBxx: Belgium & Luxembourg (skeyes.be)"
-  type: html
-  url: 'https://ops.skeyes.be'
-  start: '/html/belgocontrol_static/eaip/eAIP_Main/html/eAIP/EB-menu-en-GB.html'
-  folders:
-    - select: 'a[id^="AD-2."]:not([id$="plus"])'
-  documents:
-    - select: 'div[id$="-AD-2.24"] tr:not(:has(a))'
-      label: 'td'
-      href:
-        child: '+tr td a'
-        attrib: 'href'
-      format:
-        - replace: ['AD 2.', '']
-EG:
-  label: "EGxx: United Kingdom NATS"
-  type: html
-  url: 'https://www.aurora.nats.co.uk'
-  start: '/htmlAIP/Publications/2021-01-28-AIRAC/html/eAIP/EG-menu-en-GB.html'
-  folders:
-    - select: '#ADdetails #AD-2details>div.Hx>a[href!="#"]'
-      label: 'a>*:not(.sdParams)'
-      format:
-        - replace: ['AD-2.', '']
-  documents:
-    - select: 'div[id$="2.24"] tr'
-      format:
-        - replace: ['STANDARD DEPARTURE CHART - ', '']
-        - replace: ['INSTRUMENT (SID)', 'SID']
-        - replace: [' - ICAO', '']
-        - replace: [' (DME/DME or GNSS)', '']
-        - replace: [' (DME/DME OR GNSS)', '']
-        - replace: ['STANDARD INSTRUMENT DEPARTURE', '']
-        - regex: ['STANDARD ARRIVAL CHART *- INSTRUMENT \(STAR\)', 'STAR']
-        - replace: ['STANDARD ARRIVAL CHART', 'STAR']
-        - replace: ['STANDARD INSTRUMENT ARRIVAL', 'STAR']
-        - replace: ['INSTRUMENT APPROACH CHART', 'IAC']
-        - replace: ['CODING TABLES', 'Coding Tables']
-      href:
-        child: '+tr a'
-        attrib: 'href'
-EH:
-  label: "EHxx: Netherlands eAIP"
-  type: html
-  url: 'https://www.lvnl.nl'
-  start: '/informatie-voor-luchtvarenden/publicaties-voor-luchtvarenden'
-  folders:
-    - select: 'frame[name=eAISMenuContentFrame],frame[name=eAISMenuFrameset],frame[name=eAISMenuContent]'
-      href: '@src'
-      label: '@name'
-      format:
-        - replace: ['eAIS', '']
-        - replace: ['Menu', '']
-        - 'split-humps'
-      auto-follow: true
-    - select: 'div.H1>a#AD,div.H1>a#ENR,div.H1>a#GEN'
-      label: '@title'
-    - select: 'a[title=eAIP]'
-      auto-follow: true
-    - select: 'h3.toc a'
-      format:
-        - replace: ['/', ' / ']
-  documents:
-    - select: 'td'
-      href:
-        child: 'div.Figure a'
-        attrib: 'href'
-      format:
-        - replace: ['AD 2.', '']
-        - replace: ['-', ' ']
-EK:
-  label: "EKxx: Denmark NavAID"
-  type: navaid
-  template: 'https://aim.naviair.dk/umbraco/api/naviairapi/getnodesforparent?parentId={parentid}'
-EN:
-  label: "ENxx: Norway Avinor"
-  type: html
-  url: 'https://ais.avinor.no'
-  start: '/no/AIP/'
-  folders:
-    - select: '.history_pane a'
-      auto-follow: true
-    - select: 'frame[name=eAISNavigationBase]'
-      href: '@src'
-      auto-follow: true
-    - select: 'frame[name=eAISCommands][src="commands-no-NO.html"]'
-      href: '@src'
-      auto-follow: true
-    - select: 'div.menu-items p.command a[href="index-en-GB.html"]'
-      auto-follow: true
-    - select: 'frame[name=eAISNavigation][src^="eAIP/EN-menu"]'
-      href: '@src'
-      auto-follow: true
-    - select: '#ADdetails #AD-2details>div.Hx>a[href!="#"]'
-      label: '>:nth-child(2),>:nth-child(3)'
-  documents:
-    - select: 'div[id$="2.24"] tr'
-      label: 'p,a'
-      href:
-        child: 'a[href$=".pdf"]'
-        attrib: 'href'
-ES:
-  label: "ESxx: Sweden AROWeb"
-  type: html
-  url: 'https://aro.lfv.se'
-  start: '/Editorial/View/IAIP?folderId=79'
-  folders:
-    - select: 'tr.sortableFolder-row'
-      label: 'a'
-      href:
-        child: 'a.sortableFolder--rightArrow'
-        attrib: 'href'
-    - select: 'a.folder-link'
-      label: 'span:not(.folder-arrow)'
-  documents:
-    - select: 'a.document-link[href^="/Editorial/View/"][href$="_en"]:has(span.document-prefix)'
-      label: 'span.document-prefix,span.document-name'
-LF:
-  label: "LFxx: France SIA"
-  type: html
-  url: 'https://www.sia.aviation-civile.gouv.fr'
-  start: '/dvd/eAIP_{airac.day2}_{airac.monthNameU3}_{airac.year}/FRANCE/AIRAC-{airac.year}-{airac.month2}-{airac.day2}/html/eAIP/FR-menu-fr-FR.html'
-  folders:
-    # - select: 'nav.navigation li.level0:nth-child(2) a[href!="#"]'
-    #   context: '/'
-    # - select: '#dateVig,#dateVigNext'
-    - select: 'div#AD-2-IFRdetails div.H3 a[href!="#"]'
-    - select: 'div#AD-2-VFRdetails div.H3 a[href!="#"]'
-    - select: 'div#AD-2-MILdetails div.H3 a[href!="#"]'
-  documents:
-    - select: 'div.graphic-box a'
-      format:
-        - 'basename'
-        - split: '-'
-        - split: '_'
-LO:
-  label: "LOxx: Austria (austrocontrol)"
-  type: html
-  url: 'https://eaip.austrocontrol.at'
-  start: '/'
-  folders:
-    - select: 'TR.current A'
-      auto-follow: true
-    - select: '#menu LI:not(:first-child) A'
-      context: '^index.htm'
-    - select: '.center-column-holder TR:has(A[target!="_blank"])'
-      label: 'I,A'
-      href:
-        child: 'A[target!="_blank"]'
-        attrib: 'href'
-  documents:
-    - select: '.center-column-holder TR:has(A[href$=".pdf"])'
-      label: 'I,A[href$=".pdf"]'
-      href:
-        child: 'A[href$=".pdf"]'
-        attrib: 'href'
-LS:
-  label: "LSxx: Switzerland (vacc.ch)"
-  type: html
-  url: 'https://www.vacc.ch'
-  start: '/en/airports_and_charts/'
-  folders:
-    - select: 'select[name="airports_and_charts"]>option[value!=""]'
-      href: '@value'
-      context: '/en/airports_and_charts/'
-  documents:
-    - select: 'legend#charts~table tr:has(a)'
-      label: 'td:nth-child(2),td:nth-child(3)'
-      href:
-        child: 'a'
-        attrib: 'href'
-      context: '!/en/airports_and_charts/'
-ED:
-  label: "EDxx: Germany Luftfahrthandbuch"
-  type: html
-  url: 'https://aip.dfs.de'
-  start: '/basicIFR/'
-  folders:
-    - select: 'a.folder-link'
-      label: '.folder-prefix,.folder-name'
-  documents:
-    - select: 'a.document-link'
-      label: '.document-prefix,.document-name'
-      format:
-        - regex: ['^AD 2 [A-Z]{4} [0-9]+(-[0-9]+)+ *', '']
-        - replace: ['Instrument Approach Chart', 'IAC']
-        - replace: ['- Instrument', '']
-        - replace: ['Standard Arrival Chart', 'STAR']
-        - replace: ['Standard Departure Chart', 'SID']
-        - replace: ['Departure Chart', 'SID']
-        - replace: ['Standard Departure Routes', 'SID Routes']
-      filter: '.'
-      href-format:
-        - regex: ['^pages/(.*)\.html$', '/basicIFR/print/AD/$1/AD%20ANYTHING']
-      auto-follow: true
+1000.NorthAmerica:
+  label: "North America"
+  type: group
+  providers:
+    K.sky:
+      label: "Kxxx,Pxxx: USA (Skyvector)"
+      type: lua
+      script: 'provider-scripts/usa.lua'
+
+    C:
+      label: "Cxxx: Canada"
+      type: html
+      url: 'http://www.uvairlines.com'
+      start: '/admin/resources/charts-canada.htm'
+      documents:
+        - select: 'table a'
+      folders: []
+
+2000.Europe:
+  label: "Europe"
+  type: group
+  providers:
+    BI:
+      label: "BIxx: Iceland (Samgöngustofa)"
+      type: lua
+      script: 'provider-scripts/iceland.lua'
+    EB:
+      label: "EBxx: Belgium & Luxembourg (skeyes.be)"
+      type: lua
+      script: 'provider-scripts/belux.lua'
+    EK:
+      label: "EKxx: Denmark NavAID"
+      type: navaid
+      template: 'https://aim.naviair.dk/umbraco/api/naviairapi/getnodesforparent?parentId={parentid}'
+    EH:
+      label: "EHxx: Netherlands eAIP"
+      type: lua
+      script: 'provider-scripts/netherlands.lua'
+
+    EG:
+      label: "EGxx: United Kingdom NATS"
+      type: html
+      url: 'https://www.aurora.nats.co.uk'
+      start: '/htmlAIP/Publications/2021-01-28-AIRAC/html/eAIP/EG-menu-en-GB.html'
+      folders:
+        - select: '#ADdetails #AD-2details>div.Hx>a[href!="#"]'
+          label: 'a>*:not(.sdParams)'
+          format:
+            - replace: ['AD-2.', '']
+      documents:
+        - select: 'div[id$="2.24"] tr'
+          format:
+            - replace: ['STANDARD DEPARTURE CHART - ', '']
+            - replace: ['INSTRUMENT (SID)', 'SID']
+            - replace: [' - ICAO', '']
+            - replace: [' (DME/DME or GNSS)', '']
+            - replace: [' (DME/DME OR GNSS)', '']
+            - replace: ['STANDARD INSTRUMENT DEPARTURE', '']
+            - regex: ['STANDARD ARRIVAL CHART *- INSTRUMENT \(STAR\)', 'STAR']
+            - replace: ['STANDARD ARRIVAL CHART', 'STAR']
+            - replace: ['STANDARD INSTRUMENT ARRIVAL', 'STAR']
+            - replace: ['INSTRUMENT APPROACH CHART', 'IAC']
+            - replace: ['CODING TABLES', 'Coding Tables']
+          href:
+            child: '+tr a'
+            attrib: 'href'
+    EN:
+      label: "ENxx: Norway Avinor"
+      type: html
+      url: 'https://ais.avinor.no'
+      start: '/no/AIP/'
+      folders:
+        - select: '.history_pane a'
+          auto-follow: true
+        - select: 'frame[name=eAISNavigationBase]'
+          href: '@src'
+          auto-follow: true
+        - select: 'frame[name=eAISCommands][src="commands-no-NO.html"]'
+          href: '@src'
+          auto-follow: true
+        - select: 'div.menu-items p.command a[href="index-en-GB.html"]'
+          auto-follow: true
+        - select: 'frame[name=eAISNavigation][src^="eAIP/EN-menu"]'
+          href: '@src'
+          auto-follow: true
+        - select: '#ADdetails #AD-2details>div.Hx>a[href!="#"]'
+          label: '>:nth-child(2),>:nth-child(3)'
+      documents:
+        - select: 'div[id$="2.24"] tr'
+          label: 'p,a'
+          href:
+            child: 'a[href$=".pdf"]'
+            attrib: 'href'
+    ES:
+      label: "ESxx: Sweden AROWeb"
+      type: html
+      url: 'https://aro.lfv.se'
+      start: '/Editorial/View/IAIP?folderId=79'
+      folders:
+        - select: 'tr.sortableFolder-row'
+          label: 'a'
+          href:
+            child: 'a.sortableFolder--rightArrow'
+            attrib: 'href'
+        - select: 'a.folder-link'
+          label: 'span:not(.folder-arrow)'
+      documents:
+        - select: 'a.document-link[href^="/Editorial/View/"][href$="_en"]:has(span.document-prefix)'
+          label: 'span.document-prefix,span.document-name'
+    LE:
+      label: "LExx: Spain Enaire"
+      type: lua
+      script: 'provider-scripts/spain.lua'
+    LF:
+      label: "LFxx: France SIA"
+      type: html
+      url: 'https://www.sia.aviation-civile.gouv.fr'
+      start: '/dvd/eAIP_{airac.day2}_{airac.monthNameU3}_{airac.year}/FRANCE/AIRAC-{airac.year}-{airac.month2}-{airac.day2}/html/eAIP/FR-menu-fr-FR.html'
+      folders:
+        # - select: 'nav.navigation li.level0:nth-child(2) a[href!="#"]'
+        #   context: '/'
+        # - select: '#dateVig,#dateVigNext'
+        - select: 'div#AD-2-IFRdetails div.H3 a[href!="#"]'
+        - select: 'div#AD-2-VFRdetails div.H3 a[href!="#"]'
+        - select: 'div#AD-2-MILdetails div.H3 a[href!="#"]'
+      documents:
+        - select: 'div.graphic-box a'
+          format:
+            - 'basename'
+            - split: '-'
+            - split: '_'
+    LO:
+      label: "LOxx: Austria (austrocontrol)"
+      type: html
+      url: 'https://eaip.austrocontrol.at'
+      start: '/'
+      folders:
+        - select: 'TR.current A'
+          auto-follow: true
+        - select: '#menu LI:not(:first-child) A'
+          context: '^index.htm'
+        - select: '.center-column-holder TR:has(A[target!="_blank"])'
+          label: 'I,A'
+          href:
+            child: 'A[target!="_blank"]'
+            attrib: 'href'
+      documents:
+        - select: '.center-column-holder TR:has(A[href$=".pdf"])'
+          label: 'I,A[href$=".pdf"]'
+          href:
+            child: 'A[href$=".pdf"]'
+            attrib: 'href'
+    LS:
+      label: "LSxx: Switzerland (vacc.ch)"
+      type: html
+      url: 'https://www.vacc.ch'
+      start: '/en/airports_and_charts/'
+      folders:
+        - select: 'select[name="airports_and_charts"]>option[value!=""]'
+          href: '@value'
+          context: '/en/airports_and_charts/'
+      documents:
+        - select: 'legend#charts~table tr:has(a)'
+          label: 'td:nth-child(2),td:nth-child(3)'
+          href:
+            child: 'a'
+            attrib: 'href'
+          context: '!/en/airports_and_charts/'
+    ED:
+      label: "EDxx: Germany Luftfahrthandbuch"
+      type: html
+      url: 'https://aip.dfs.de'
+      start: '/basicIFR/'
+      folders:
+        - select: 'a.folder-link'
+          label: '.folder-prefix[lang=en],.folder-name[lang=en]'
+      documents:
+        - select: 'a.document-link'
+          label: '.document-prefix[lang=en],.document-name[lang=en]'
+          format:
+            - regex: ['^AD 2 [A-Z]{4} [0-9]+(-[0-9]+)+ *', '']
+            - replace: ['Instrument Approach Chart', 'IAC']
+            - replace: ['- Instrument', '']
+            - replace: ['Standard Arrival Chart', 'STAR']
+            - replace: ['Standard Departure Chart', 'SID']
+            - replace: ['Departure Chart', 'SID']
+            - replace: ['Standard Departure Routes', 'SID Routes']
+          filter: '.'
+          href-format:
+            - regex: ['^pages/(.*)\.html$', '/basicIFR/print/AD/$1/AD%20ANYTHING']
+          auto-follow: true
