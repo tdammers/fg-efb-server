@@ -29,13 +29,13 @@ moduleHTTP =
     []
     -- functions
     [ defun "download"
-        ### (\url extension -> liftIO (downloadHttp url extension))
+        ### (\url extension -> liftAndRethrowIO (downloadHttp url extension))
         <#> parameter peekText "string" "url" "URL to fetch from"
         <#> parameter peekString "string" "extension" "file extension for cache file"
         =#> functionResult pushString "string" "filename"
     , defun "get"
         ### (\url -> do
-              (finalURL, body) <- liftIO (httpCachedGET url)
+              (finalURL, body) <- liftAndRethrowIO (httpCachedGET url)
               pushByteString (LBS.toStrict body)
               pushText finalURL
               return 2
