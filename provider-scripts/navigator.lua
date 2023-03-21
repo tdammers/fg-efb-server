@@ -25,7 +25,6 @@ function HTTPNavigator:follow (query, attr)
     local result = doc:query(query)
     if #result == 0 then
         print("Query not matched, not navigating anywhere")
-        print(doc)
         print(query)
         self.doc = nil
     else

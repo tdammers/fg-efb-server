@@ -28,6 +28,10 @@
       label: "EBxx: Belgium & Luxembourg (skeyes.be)"
       type: lua
       script: 'provider-scripts/belux.lua'
+    EF:
+      label: "EFxx: Finland (Fintraffic)"
+      type: lua
+      script: 'provider-scripts/finland.lua'
     EK:
       label: "EKxx: Denmark NavAID"
       type: navaid
