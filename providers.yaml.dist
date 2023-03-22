@@ -20,6 +20,9 @@
   label: "Europe"
   type: group
   providers:
+    # TODO:
+    # EI (Ireland): http://iaip.iaa.ie/iaip/index.htm
+    # LI (Italy): https://www.enav.it/user/register
     BI:
       label: "BIxx: Iceland (Samgöngustofa)"
       type: lua
@@ -28,6 +31,10 @@
       label: "EBxx: Belgium & Luxembourg (skeyes.be)"
       type: lua
       script: 'provider-scripts/belux.lua'
+    ED:
+      label: "EDxx: Germany Luftfahrthandbuch"
+      type: lua
+      script: 'provider-scripts/germany.lua'
     EF:
       label: "EFxx: Finland (Fintraffic)"
       type: lua
@@ -170,26 +177,3 @@
             child: 'a'
             attrib: 'href'
           context: '!/en/airports_and_charts/'
-    ED:
-      label: "EDxx: Germany Luftfahrthandbuch"
-      type: html
-      url: 'https://aip.dfs.de'
-      start: '/basicIFR/'
-      folders:
-        - select: 'a.folder-link'
-          label: '.folder-prefix[lang=en],.folder-name[lang=en]'
-      documents:
-        - select: 'a.document-link'
-          label: '.document-prefix[lang=en],.document-name[lang=en]'
-          format:
-            - regex: ['^AD 2 [A-Z]{4} [0-9]+(-[0-9]+)+ *', '']
-            - replace: ['Instrument Approach Chart', 'IAC']
-            - replace: ['- Instrument', '']
-            - replace: ['Standard Arrival Chart', 'STAR']
-            - replace: ['Standard Departure Chart', 'SID']
-            - replace: ['Departure Chart', 'SID']
-            - replace: ['Standard Departure Routes', 'SID Routes']
-          filter: '.'
-          href-format:
-            - regex: ['^pages/(.*)\.html$', '/basicIFR/print/AD/$1/AD%20ANYTHING']
-          auto-follow: true
