@@ -21,7 +21,6 @@ import Text.Printf (printf)
 import qualified Text.XML as XML
 import qualified Text.XML.Cursor as XML
 
-import FGEFB.LoadPDF
 import FGEFB.Provider
 import FGEFB.Regex
 import FGEFB.URL (renderURLText, parseURLText, URL (..), normalizeURL)

@@ -10,28 +10,15 @@ where
 
 import Control.Exception
 import Control.Monad.Except
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Network.HTTP.Types (urlDecode)
-import qualified Text.HTML.DOM as HTML
-import Text.Megaparsec.Pos (SourcePos (..), initialPos, unPos)
-import qualified Text.XML as XML
-import qualified Text.XML.Cursor as XML
 
-import Debug.Trace
 import qualified HsLua as Lua
 
-import FGEFB.HTTP (downloadHttp)
 import FGEFB.Provider
-import FGEFB.URL (renderURLText, parseURLText, URL (..))
-import FGEFB.XmlUtil (jqQuery)
-import FGEFB.Lua.Util
 import FGEFB.Lua.XML
 import FGEFB.Lua.HTTP
 
@@ -79,15 +66,15 @@ luaProvider
     runLua funcname pathText peeker = do
       luaOutput <- Lua.runEither $ do
         Lua.openlibs
-        Lua.dostring "package.path = './provider-scripts/?.lua'"
-        Lua.dostring "package.cpath = ''"
+        void $ Lua.dostring "package.path = './provider-scripts/?.lua'"
+        void $ Lua.dostring "package.cpath = ''"
         Lua.preloadModule moduleXML
         Lua.preloadModule moduleHTTP
         Lua.preloadModule moduleURL
         Lua.pushMap Lua.pushText Lua.pushValue (contextDefs context)
         Lua.setglobal "context"
         luaThrowStatus $ Lua.dofileTrace scriptFilename
-        Lua.getglobal funcname
+        void $ Lua.getglobal funcname
         Lua.push pathText
         luaThrowStatus $ Lua.pcallTrace 1 1
         Lua.force =<< Lua.runPeeker peeker Lua.top

@@ -17,7 +17,6 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Default (def)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
 import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text

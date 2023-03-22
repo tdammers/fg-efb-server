@@ -9,7 +9,6 @@ where
 
 import HsLua as Lua
 import qualified Data.ByteString.Lazy as LBS
-import Data.Text (Text)
 import Data.ByteString (ByteString)
 import Network.HTTP.Types (urlEncode)
 

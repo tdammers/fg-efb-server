@@ -19,11 +19,10 @@ extra-source-files: static/style.css
                   , static/style.xsl
                   , static/error.png
                   , static/notfound.png
+                  , static/icons/*.png
 
 executable fg-efb-server
   main-is: Main.hs
-  -- ghc-options: -Wall -Wunused-imports
-  ghc-options: -Wall -Wno-error -Wno-unused-imports -Wno-unused-local-binds -Wno-unused-do-bind
   other-modules:
     FGEFB.Airac
     FGEFB.HTTP

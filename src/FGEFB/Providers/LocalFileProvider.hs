@@ -9,7 +9,6 @@ import qualified Data.Text as Text
 import System.Directory (listDirectory, doesDirectoryExist)
 import System.FilePath ( (</>), takeExtension, takeBaseName )
 
-import FGEFB.LoadPDF
 import FGEFB.Provider
 
 classifyFile :: FilePath -> FilePath -> FilePath -> IO (Maybe FileInfo)

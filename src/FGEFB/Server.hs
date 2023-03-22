@@ -26,7 +26,6 @@ import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.IO as LText
 import Data.Time (UTCTime (..), getCurrentTime)
 import qualified Data.Yaml as YAML
-import Debug.Trace
 import qualified Network.HTTP.Types as HTTP
 import Network.Wai as Wai
 import System.Directory
@@ -45,12 +44,12 @@ import qualified Web.Scotty as Scotty
 
 import FGEFB.Airac (Airac, findCurrentAiracOn, airacDetails)
 import qualified FGEFB.Airac as Airac
+import FGEFB.LoadPDF
 import FGEFB.Provider
 import FGEFB.Providers
 import FGEFB.Providers.GroupProvider
 import FGEFB.Providers.LocalFileProvider
 import FGEFB.XmlUtil
-import FGEFB.LoadPDF
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =

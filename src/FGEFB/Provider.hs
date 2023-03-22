@@ -4,7 +4,6 @@ where
 
 import qualified Data.Aeson as JSON
 import Data.Bool (bool)
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.HashMap.Strict as HashMap
 import Data.Map (Map)
 import qualified Data.Map as Map
