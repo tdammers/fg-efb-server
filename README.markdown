@@ -20,7 +20,15 @@ https://github.com/tdammers/E-jet-family-YV/blob/wip/efb/Documentation/EFB.markd
 
 ## Installation
 
+### From Source
+
 - `cabal v2-install`
+
+### x86 Linux
+
+The release tarball contains a self-contained ready-to-run executable; move it
+anywhere on your `$PATH`, and it should Just Work (but see "Runtime
+Dependencies" below).
 
 ## Runtime Dependencies
 
@@ -63,11 +71,15 @@ environment variable `MAGICK_BINARY`, e.g.:
 
 ## Data Sources Configuration
 
-Data sources can be configured by editing the file `providers.yaml`. On
-UNIX-like systems, this file will be searched in:
+Data sources can be configured by creating a file named `providers.yaml`.
+On UNIX-like systems, this file will be searched in:
 
 - `~/.config/fg-efb-server`
 - `~/.fg-efb-server`
+
+An example configuration file is provided as `providers.yaml.dist`, along with
+a directory `provider-scripts`, which contains Lua scripts that some providers
+reference.
 
 It should contain a dictionary of (arbitrary) keys to provider specs. See the
 enclosed `providers.yaml.dist` example file. If no `providers.yaml` file was
@@ -166,6 +178,136 @@ the `src` attribute to get the URL, and the `title` attribute for a label;
 but when extracting `<a>` tags, you would want to use the `href` attribute for
 URLs, and the text content for labels.
 
+### `lua` Spec Keys
+
+The `lua` provider only needs a single key:
+
+- **`script`** - A file path to a Lua script that defines the provider's
+  behavior. File paths are interpreted relative to the directory where
+  `providers.yaml` resides.
+
+#### Lua Scripting
+
+Lua provider scripts must meet the following criteria:
+
+- The script must contain a function named `getPDF()`, which takes a single
+  argument, `path`. This function should return a local path to a PDF file
+  corresponding to the given `path`. What exactly `path` looks like is up to
+  the script, but it should be a valid URL query path. The returned local path
+  should normally come from a call to `http.download()` (see below), but you
+  can of course also serve local PDF files directly.
+- The script must contain a function named `listFiles()`, which takes a single
+  argument, `path`, and returns a list of file descriptions. The empty string
+  will be passed as the entry point for the provider.
+- File descriptions returned by `listFiles()` are tables with the following
+  keys:
+  - `type`: must be either `"pdf"` (which will lead to `getPDF()`) or `"dir"`
+    (which will lead to `listFiles()`).
+  - `name`: a human-readable display name
+  - `path`: the path that will be passed to `getPDF()` or `listFiles()` on
+    subsequent calls.
+
+The Lua host preloads all the default libraries, and provides some additional
+built-in libraries:
+
+- `http`: HTTP requests.
+  - `http.download(url, extension)`: performs a cached HTTP GET request to the
+    given `url`; the downloaded file is stored with the given `extension`, and
+    the full path to that file is returned.
+  - `http.get(url)`: performs a cached HTTP GET request to the given `url`, and
+    returns the request body and the final `url` (after redirects).
+- `url`: URL functionality.
+  - `url.parse(str)`: parse the given string as a URL object. (You can simply
+    convert a URL object back to a string to render it).
+  - `url.join(left, right)`: parse the left and right strings as URL objects,
+    join them, and return the result as a string. See below (URL objects,
+    `__concat()`) for the rules by which URLs are joined. `url.join(a, b)` is
+    shorthand for `tostring(url.parse(a) .. url.parse(b))`.
+  - `encode(str)`: URL-encode the given string.
+  - URL objects
+    - `__concat()`: the concatenation operator for URLs will join them the same
+      way a web browser would:
+      - if the RHS is a full URL, it will simply replace the LHS
+      - if it is a protocol-relative URL (starting with `//`), it will retain
+        the LHS's protocol (`http:` or `https:`), but replace everything else
+      - if it is a host-relative URL (starting with `/`), it will replace the
+        entire path and query parts of the LHS, but retain the hostname and
+        protocol
+      - if it is a relative URL (starting with a query path, but no leading
+        `/`), it will append the RHS's path and query to the LHS's path
+        "directory" (retaining all but the last of the path parts)
+      - if it is a query (starting with `?`), it will replace the LHS's
+        query, but retain the protocol, host, and path
+      - if it is an anchor (starting with `#`), it will replace the LHS's
+        anchor part, but retain the rest
+    - `.protocol`: `"http"` or `"https"`
+    - `.host`: hostname (e.g. `"www.example.org"`)
+    - `.path`: the URL path, as a list of parts (e.g. `foo/bar/baz` becomes
+      `{"foo", "bar", "baz"}`).
+    - `.query`: the query, as a key-value table
+    - `.anchor`: string, everything after `#`.
+- `xml`: XML DOM functionality.
+  - `xml.mkName(local)`: make an XML Name object representing an unqualified
+    local name (e.g. `<foobar/>`)
+  - `xml.mkNameNS(local, namespaceURI)`: make an XML Name object representing a
+    local name with a namespace URI (e.g. `<foobar xmlns="baz"/>`)
+  - `xml.mkQName(prefix, local)`: make an XML Name object representing a name
+    with a namespace prefix, in an unspecified namespace (e.g. `<foo:foobar
+    />`).
+  - `xml.mkQNameNS(prefix, local, namespace)`: make an XML Name object
+    representing a name with a namespace prefix and a namespace URI (e.g.
+    `<foo:foobar xmlns:foo="baz"/>`).
+  - `xml.toname(str)`: parse a string as an XML Name object. Clarke notation is
+    supported (e.g. `xml.toname("{baz}foobar")` amounts to `foobar
+    xmlns="baz"`).
+  - `xml.parseHTML(src)`: parses the given `src` string into an XML DOM object.
+  - XML Name
+    - `.local` - local name
+    - `.namespace` - full namespace URI
+    - `.prefix` - namespace alias prefix
+  - XML Element
+    - `.type` - always `"element"` for XML elements
+    - `.name` - element name
+    - `.attributes` - XML Attributes object
+    - `.children` - list of child nodes
+    - `.textContent` - text content, as per XML DOM spec
+    - `:attr(name)` - shorthand for `.attributes[name]`
+    - `:query(selector)` - run an extended CSS selector query, return list of
+      result cursors.
+  - XML Node
+    - `.type` - one of `"element"`, `"comment"`, `"content"`, `"instruction"`
+    - `.name` - node name (element name for elements, `nil` for others)
+    - `.attributes` - XML Attributes object (elements only; `nil` for others)
+    - `.children` - list of child nodes (empty list for non-element nodes)
+    - `.textContent` - text content
+    - `:attr(name)` - shorthand for `.attributes[name]` (returns `nil` for
+      non-element nodes)
+    - `:query(selector)` - run an extended CSS selector query, return list of
+      result cursors.
+  - XML Attribs (attribute list)
+    - `.size`: number of attributes in the list.
+    - `[]`: look up or set attribute by name. Accepts strings or XML Name
+      objects for the keys.
+  - XML Document
+    - `.rootElement`: the document's root element
+    - `:query(selector)`: run an extended CSS selector query, return list of
+      result cursors.
+  - XML Cursor (query result)
+    - `.node`: the XML Node object that the cursor points to.
+    - `:query(selector)`: run an extended CSS selector query, return list of
+      result cursors.
+    The reason we distinguish nodes from cursors is that cursors retain
+    information about their siblings and ancestors, and to achieve this, they
+    are implemented as an infinitely large lazy data structure behind the
+    scenes, which makes it impossible to convert them to strict Lua data as-is.
+    The `.node` field removes this extra information, making the data structure
+    finite, but any further `:query()` calls on the node will not take the
+    node's ancestory into consideration, but rather treat it as the root
+    element of a self-contained DOM. This can occasionally be an advantage,
+    though, because many queries will only need to consider a subset of a
+    larger DOM tree, and by cutting that subtree off, we can make the query
+    more efficient.
+
 ## Caching
 
 Because downloading PDF files over HTTP costs a lot of bandwidth, and may make
@@ -183,7 +325,16 @@ runs.
 
 ## Bugs & Caveats
 
-This is very alpha-quality code; use at your own risk.
-
-Pretty much anything about it is subject to change without prior notice;
-consider yourself warned.
+- The `lua` provider runs a full-blown Lua interpreter, and it is not
+  sandboxed, meaning that any Lua scripts you have in your configuration can
+  run arbitrary Lua code in the context of your server process. You should only
+  run fg-efb-server against a configuration you trust.
+- While we pass a memory limit to the `magick` process, this does not seem to
+  work reliably, and it is possible for exceptionally large PDF files to make
+  `magick` consume all your RAM and cause your system to come to a swapping
+  grinding halt. If you are concerned about this, consider running
+  fg-efb-server with strict `ulimit` constraints (at least on Linux, this
+  should work).
+- fg-efb-server does not detect the number of pages in a PDF, so it is not
+  possible for the EFB to show a correct pager or prevent flipping past the
+  last page.
