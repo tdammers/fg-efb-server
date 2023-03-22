@@ -12,19 +12,19 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        ghc: ['8.8.4']
+        ghc: ['9.4']
 
     runs-on: ${{matrix.os}}
 
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-haskell@v1
+    - uses: actions/checkout@v3
+    - uses: haskell/actions/setup@v2.3.6
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: '3.2'
 
     - name: Cache
-      uses: actions/cache@v1
+      uses: actions/cache@v3
       env:
         cache-name: cache-cabal
       with:
@@ -49,7 +49,7 @@ jobs:
         cp *.yaml.dist ${{ github.workspace }}/dist/
         cabal install --install-method=copy --installdir=${{ github.workspace }}/dist
     - name: Upload
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: fg-efb-server ${{ runner.os }}
         path: ${{ github.workspace }}/dist/*
