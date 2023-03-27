@@ -68,10 +68,8 @@ captureRenderedPage rq =
 captureFileInfo :: Wai.Request -> Maybe [Scotty.Param]
 captureFileInfo rq =
   case filter (not . Text.null) (Wai.pathInfo rq) of
-    "charts":"files":pathItems
-      | not (null pathItems)
-      , last pathItems == "meta.xml"
-      -> Just [("path", LText.fromStrict $ Text.intercalate "/" (init pathItems))]
+    "charts":"meta":pathItems ->
+      Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ ->
       Nothing
 
@@ -191,23 +189,24 @@ xmlFileList files =
 
 xmlFileEntry :: FileInfo -> XML.Node
 xmlFileEntry info =
-    XML.NodeElement $
-      XML.Element rootElemName
-        []
-        [ XML.NodeElement $ XML.Element "name" [] [ XML.NodeContent (fileName info) ]
-        , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent (prefix <> filePath info) ]
-        , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent fileTypeString ]
-        ]
-    where
-      fileTypeString = case fileType info of
-        Directory -> "dir"
-        PDFFile -> "pdf"
-      prefix = case fileType info of
-        Directory -> "/charts/api/"
-        PDFFile -> "/charts/files/"
-      rootElemName = case fileType info of
-        Directory -> "directory"
-        PDFFile -> "file"
+  case fileType info of
+    Directory ->
+      XML.NodeElement $
+        XML.Element "directory"
+          []
+          [ XML.NodeElement $ XML.Element "name" [] [ XML.NodeContent (fileName info) ]
+          , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent ("/charts/api/" <> filePath info) ]
+          , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent "directory" ]
+          ]
+    PDFFile ->
+      XML.NodeElement $
+        XML.Element "file"
+          []
+          [ XML.NodeElement $ XML.Element "name" [] [ XML.NodeContent (fileName info) ]
+          , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent ("/charts/files/" <> filePath info) ]
+          , XML.NodeElement $ XML.Element "meta" [] [ XML.NodeContent ("/charts/meta/" <> filePath info) ]
+          , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent "pdf" ]
+          ]
 
 xmlFileInfo :: Text -> [(Text, Text)] -> XML.Element
 xmlFileInfo filename infos =
