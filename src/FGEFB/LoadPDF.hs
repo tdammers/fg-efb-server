@@ -68,3 +68,21 @@ convertPdfPage path page output = do
       putStrLn $ "PDF conversion exited with error " <> show e
       putStrLn err
       error "Something bad happened."
+
+getPdfInfo :: FilePath -> IO [(Text, Text)]
+getPdfInfo path = do
+  pdfinfo <- fromMaybe "pdfinfo" <$> lookupEnv "PDFINFO_BINARY"
+  (exitCode, outStr, errStr) <- Process.readProcessWithExitCode pdfinfo [ path ] ""
+  case exitCode of
+    ExitSuccess -> do
+      return $ map splitPair . Text.lines $ Text.pack outStr
+    ExitFailure e -> do
+      putStrLn $ "PDF info could not be gathered, error " <> show e
+      putStrLn outStr
+      putStrLn errStr
+      return []
+  where
+    splitPair :: Text -> (Text, Text)
+    splitPair ln =
+      let (leftRaw, rightRaw) = Text.breakOn ":" ln
+      in (Text.strip leftRaw, Text.strip . Text.drop 1 $ rightRaw)

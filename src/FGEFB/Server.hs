@@ -54,22 +54,26 @@ import FGEFB.XmlUtil
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
   case filter (not . Text.null) (Wai.pathInfo rq) of
-    "api":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
+    "charts":"api":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ -> Nothing
 
 captureRenderedPage :: Wai.Request -> Maybe [Scotty.Param]
 captureRenderedPage rq =
   case filter (not . Text.null) (Wai.pathInfo rq) of
-    "files":pathItems ->
+    "charts":"files":pathItems ->
       Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
     _ ->
       Nothing
 
-captureRawFile :: Wai.Request -> Maybe [Scotty.Param]
-captureRawFile rq =
+captureFileInfo :: Wai.Request -> Maybe [Scotty.Param]
+captureFileInfo rq =
   case filter (not . Text.null) (Wai.pathInfo rq) of
-    "raw":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
-    _ -> Nothing
+    "charts":"files":pathItems
+      | not (null pathItems)
+      , last pathItems == "meta.xml"
+      -> Just [("path", LText.fromStrict $ Text.intercalate "/" (init pathItems))]
+    _ ->
+      Nothing
 
 errorPNG :: Scotty.ActionM ()
 errorPNG = do
@@ -113,7 +117,7 @@ app listingCache provider = do
 
   Scotty.get "/" $ do
     Scotty.headers >>= Scotty.liftAndCatchIO . print
-    Scotty.redirect "/api"
+    Scotty.redirect "/charts/api"
 
   Scotty.get "/static/style.css" styleCSS
   Scotty.get "/static/style.xsl" styleXSL
@@ -132,6 +136,16 @@ app listingCache provider = do
     Scotty.setHeader "Content-type" "text/xml"
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
       xmlFileList files
+
+  -- Page metadata
+  Scotty.get (Scotty.function captureFileInfo) $ do
+    filename <- Scotty.param "path"
+    pdfFilenameMaybe <- Scotty.liftAndCatchIO $ getPdf provider filename
+    pdfFilename <- maybe Scotty.next return $ pdfFilenameMaybe
+    pdfInfo <- Scotty.liftAndCatchIO $ getPdfInfo pdfFilename
+    Scotty.setHeader "Content-type" "text/xml"
+    Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
+      xmlFileInfo filename pdfInfo
 
   -- Pages rendered to JPG
   Scotty.get (Scotty.function captureRenderedPage) $ do
@@ -189,11 +203,27 @@ xmlFileEntry info =
         Directory -> "dir"
         PDFFile -> "pdf"
       prefix = case fileType info of
-        Directory -> "/api/"
-        PDFFile -> "/files/"
+        Directory -> "/charts/api/"
+        PDFFile -> "/charts/files/"
       rootElemName = case fileType info of
         Directory -> "directory"
         PDFFile -> "file"
+
+xmlFileInfo :: Text -> [(Text, Text)] -> XML.Element
+xmlFileInfo filename infos =
+  XML.Element "meta"
+    []
+    (
+      [ XML.NodeElement $ XML.Element "filename" [] [ XML.NodeContent filename ] ]
+      <>
+      [ XML.NodeElement $ XML.Element "property"
+          [ ("name", k)
+          , ("value", v)
+          ]
+          []
+      | (k, v) <- infos
+      ]
+    )
 
 xmlProviderList :: Map Text Provider -> XML.Element
 xmlProviderList providers =

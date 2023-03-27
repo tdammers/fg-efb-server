@@ -26,3 +26,17 @@ html {
 .listing>.file,
 .listing>.directory {
 }
+
+.property-table {
+    border-collapse: collapse;
+}
+
+.property-table td,
+.property-table th {
+    border: solid 1px black;
+    padding: 4px;
+}
+
+.property-table th {
+    text-align: left;
+}
