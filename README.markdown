@@ -37,6 +37,10 @@ Dependencies" below).
   Linux distros still ship) will likely work too, but may require some
   additional hoop-jumping (see below).
 - `GhostScript` (ImageMagick uses this to convert PDF to PNG)
+- `pdfinfo` (options) - if installed, this will be used to get PDF metadata. If
+  absent, no metadata will be served. The `PDFINFO_BINARY` environment variable
+  can be used to explicitly select a `pdfinfo` binary other than what's on the
+  `$PATH`.
 
 ## Usage
 
@@ -76,6 +80,7 @@ On UNIX-like systems, this file will be searched in:
 
 - `~/.config/fg-efb-server`
 - `~/.fg-efb-server`
+- `./` (the current working directory from where the server was launched).
 
 An example configuration file is provided as `providers.yaml.dist`, along with
 a directory `provider-scripts`, which contains Lua scripts that some providers
