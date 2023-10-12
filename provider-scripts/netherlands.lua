@@ -17,7 +17,8 @@ function listFiles(path)
 
     if path == "" then
         navigator:go(startURL)
-        navigator:follow("a[title=eAIP]", "href")
+        -- navigator:follow("a[title=eAIP]", "href")
+        navigator:follow("a[class~=btn--primary]", "href")
         navigator:follow("frame", "src")
         navigator:follow("frame[name=eAISMenuFrameset]", "src")
         navigator:follow("frame[name=eAISMenuContent]", "src")
@@ -55,6 +56,11 @@ function listFiles(path)
             local label = labelTD.textContent
             label = string.gsub(label, utf8.char(160), ' ')
             label = string.gsub(label, '^AD 2.', '')
+            label = string.gsub(label, 'Standard instrument departure', 'SID')
+            label = string.gsub(label, 'Instrument approach chart', 'IAC')
+            label = string.gsub(label, 'Standard arrival', 'STAR')
+            label = string.gsub(label, 'Aerodrome obstacle chart', 'AOC')
+            label = string.gsub(label, 'Aircraft parking / docking chart', 'APDC')
             print(labelTD)
             table.insert(result,
                 { type = "pdf"
