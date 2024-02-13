@@ -9,7 +9,8 @@ module FGEFB.Providers.LuaProvider
 where
 
 import Control.Exception
-import Control.Monad.Except
+import Control.Monad
+-- import Control.Monad.Except
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)

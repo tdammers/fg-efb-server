@@ -22,8 +22,6 @@ import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, catMaybes, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy as LText
-import qualified Data.Text.Lazy.IO as LText
 import Data.Time (UTCTime (..), getCurrentTime)
 import qualified Data.Yaml as YAML
 import qualified Network.HTTP.Types as HTTP
@@ -54,14 +52,14 @@ import FGEFB.XmlUtil
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =
   case filter (not . Text.null) (Wai.pathInfo rq) of
-    "charts":"api":pathItems -> Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
+    "charts":"api":pathItems -> Just [("path", Text.intercalate "/" pathItems)]
     _ -> Nothing
 
 captureRenderedPage :: Wai.Request -> Maybe [Scotty.Param]
 captureRenderedPage rq =
   case filter (not . Text.null) (Wai.pathInfo rq) of
     "charts":"files":pathItems ->
-      Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
+      Just [("path", Text.intercalate "/" pathItems)]
     _ ->
       Nothing
 
@@ -69,7 +67,7 @@ captureFileInfo :: Wai.Request -> Maybe [Scotty.Param]
 captureFileInfo rq =
   case filter (not . Text.null) (Wai.pathInfo rq) of
     "charts":"meta":pathItems ->
-      Just [("path", LText.fromStrict $ Text.intercalate "/" pathItems)]
+      Just [("path", Text.intercalate "/" pathItems)]
     _ ->
       Nothing
 
@@ -99,12 +97,16 @@ icons = Map.fromList $(embedDir "./static/icons")
 iconPNG :: FilePath -> Scotty.ActionM ()
 iconPNG iconName = do
   Scotty.setHeader "Content-Type" "image/png"
-  Scotty.raw =<< maybe (Scotty.liftAndCatchIO (putStrLn $ "Icon not found: " ++ iconName) >> Scotty.next) (return . LBS.fromStrict) (Map.lookup iconName icons)
+  Scotty.raw =<<
+      maybe
+        (Scotty.liftIO (putStrLn $ "Icon not found: " ++ iconName) >> Scotty.next >> return undefined)
+        (return . LBS.fromStrict)
+        (Map.lookup iconName icons)
 
 app :: Cache Text [FileInfo] -> Provider -> ScottyM ()
 app listingCache provider = do
-  Scotty.defaultHandler $ \err -> do
-    Scotty.liftAndCatchIO $ LText.putStrLn err
+  Scotty.defaultHandler $ Scotty.Handler $ \(err :: SomeException) -> do
+    Scotty.liftIO $ print err
     Scotty.setHeader "Content-type" "text/xml"
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
       XML.Element
@@ -112,9 +114,10 @@ app listingCache provider = do
         Map.empty
         [ XML.NodeContent "Something went wrong." ]
         -- [ XML.NodeContent (LText.toStrict err) ]
+    return ()
 
   Scotty.get "/" $ do
-    Scotty.headers >>= Scotty.liftAndCatchIO . print
+    Scotty.headers >>= Scotty.liftIO . print
     Scotty.redirect "/charts/api"
 
   Scotty.get "/static/style.css" styleCSS
@@ -122,14 +125,14 @@ app listingCache provider = do
   Scotty.get "/static/error.png" errorPNG
   Scotty.get "/static/notfound.png" notfoundPNG
   Scotty.get "/static/icons/:icon" $ do
-    iconName <- Scotty.param "icon"
+    iconName <- Scotty.pathParam "icon"
     iconPNG iconName
       
 
   -- directory listings
   Scotty.get (Scotty.function captureListing) $ do
-    dirname <- Scotty.param "path"
-    files <- Scotty.liftAndCatchIO $
+    dirname <- Scotty.pathParam "path"
+    files <- Scotty.liftIO $
       cached listingCache dirname $ listFiles provider dirname
     Scotty.setHeader "Content-type" "text/xml"
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
@@ -137,26 +140,26 @@ app listingCache provider = do
 
   -- Page metadata
   Scotty.get (Scotty.function captureFileInfo) $ do
-    filename <- Scotty.param "path"
-    pdfFilenameMaybe <- Scotty.liftAndCatchIO $ getPdf provider filename
-    pdfFilename <- maybe Scotty.next return $ pdfFilenameMaybe
-    pdfInfo <- Scotty.liftAndCatchIO $ getPdfInfo pdfFilename
+    filename <- Scotty.pathParam "path"
+    pdfFilenameMaybe <- Scotty.liftIO $ getPdf provider filename
+    pdfFilename <- maybe (Scotty.next >> return undefined) return $ pdfFilenameMaybe
+    pdfInfo <- Scotty.liftIO $ getPdfInfo pdfFilename
     Scotty.setHeader "Content-type" "text/xml"
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
       xmlFileInfo filename pdfInfo
 
   -- Pages rendered to JPG
   Scotty.get (Scotty.function captureRenderedPage) $ do
-    filename <- Scotty.param "path"
-    page <- Scotty.param "p" `Scotty.rescue` const (return 0)
-    ty <- Scotty.param "t" `Scotty.rescue` const (return "jpg")
+    filename <- Scotty.pathParam "path"
+    page <- Scotty.queryParam "p" `Scotty.catch` (\(_e :: SomeException) -> return 0)
+    ty <- Scotty.queryParam "t" `Scotty.catch` (\(_e :: SomeException) -> return "jpg")
 
-    pdfFilenameMaybe <- Scotty.liftAndCatchIO $ getPdf provider filename
-    pdfFilename <- maybe Scotty.next return $ pdfFilenameMaybe
+    pdfFilenameMaybe <- Scotty.liftIO $ getPdf provider filename
+    pdfFilename <- maybe (Scotty.next >> return undefined) return $ pdfFilenameMaybe
 
     case ty :: Text of
       "jpg" -> do
-        mbody <- Scotty.liftAndCatchIO $ loadPdfPage pdfFilename page
+        mbody <- Scotty.liftIO $ loadPdfPage pdfFilename page
         case mbody of
           Nothing -> Scotty.next
           Just body -> do
