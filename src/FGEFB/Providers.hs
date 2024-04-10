@@ -10,6 +10,7 @@ import FGEFB.Providers.LocalFileProvider
 import FGEFB.Providers.NavaidJsonProvider
 import FGEFB.Providers.HtmlScrapingProvider
 import FGEFB.Providers.LuaProvider
+import FGEFB.Providers.ChartfoxProvider
 
 import qualified Data.Aeson as JSON
 import Data.Aeson ( (.:), (.!=) )
@@ -42,6 +43,9 @@ instance JSON.FromJSON ProviderFactory where
             documentSel <- obj .: "documents"
             return . ProviderFactory $ \context -> 
               return $ htmlScrapingProvider context label root landing folderSel documentSel
+
+          "chartfox" -> do
+            return $ ProviderFactory . const . return $ chartfoxProvider label
 
           "group" -> do
             subFactories <- obj .: "providers"

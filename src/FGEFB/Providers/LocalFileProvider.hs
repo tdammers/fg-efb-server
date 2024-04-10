@@ -38,11 +38,11 @@ localFileProvider :: Maybe Text -> FilePath -> Provider
 localFileProvider mlabel rootDir =
   Provider
     { label = mlabel <|> Just (Text.pack $ takeBaseName rootDir)
-    , listFiles = \dirnameT -> do
+    , listFiles = \_ dirnameT page -> do
         let dirname = Text.unpack dirnameT
         listDirectory (rootDir </> dirname) >>=
-          (fmap catMaybes . mapM (classifyFile rootDir dirname))
-    , getPdf = \filename -> do
+          (fmap (paginate page . catMaybes) . mapM (classifyFile rootDir dirname))
+    , getPdf = \_ filename -> do
         return . Just $ rootDir </> Text.unpack filename
     }
 

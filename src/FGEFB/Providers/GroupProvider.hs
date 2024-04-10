@@ -13,7 +13,7 @@ import FGEFB.Provider
 groupProvider :: Maybe Text -> Map Text Provider -> Provider
 groupProvider mlabel providers = Provider
   { label = mlabel
-  , getPdf = \path -> do
+  , getPdf = \query path -> do
       case Text.splitOn "/" path of
         [] ->
           return Nothing
@@ -21,21 +21,24 @@ groupProvider mlabel providers = Provider
           let subpath = Text.intercalate "/" subpathItems
           case Map.lookup providerID providers of
             Nothing -> return Nothing
-            Just provider -> getPdf provider subpath
-  , listFiles = \path -> do
+            Just provider -> getPdf provider query subpath
+  , listFiles = \query path page -> do
       case Text.splitOn "/" path of
-        [] -> return providerList
-        [""] -> return providerList
+        [] -> return (paginate page $ providerList)
+        [""] -> return (paginate page $ providerList)
         providerID:subpathItems -> do
           let subpath = Text.intercalate "/" subpathItems
           case Map.lookup providerID providers of
-            Nothing -> return []
+            Nothing ->
+              return nullFileList
             Just provider -> do
-              infos <- listFiles provider subpath
-              return
-                [ i { filePath = providerID <> "/" <> filePath i }
-                | i <- infos
-                ]
+              FileList infos meta <- listFiles provider query subpath page
+              return $
+                FileList
+                  [ i { filePath = providerID <> "/" <> filePath i }
+                  | i <- infos
+                  ]
+                  meta
   }
   where
     providerList =

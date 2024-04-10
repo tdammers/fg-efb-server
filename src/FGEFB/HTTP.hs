@@ -24,6 +24,7 @@ import System.IO.Temp (getCanonicalTemporaryDirectory)
 import qualified Text.HTML.DOM as HTML
 import Text.Printf (printf)
 import qualified Text.XML.Cursor as XML
+import qualified Data.Aeson as JSON
 
 import FGEFB.URL
 import FGEFB.XmlUtil (jqQuery)
@@ -90,7 +91,53 @@ httpCachedGET url = do
   withCacheImmediate url httpGET
 
 httpGET :: Text -> IO (Text, LBS.ByteString)
-httpGET urlInitial = do
+httpGET url = http GET url Nothing []
+
+httpGETWithHeaders :: Text -> [(HTTP.HeaderName, BS.ByteString)] -> IO (Text, LBS.ByteString)
+httpGETWithHeaders url headers = http GET url Nothing headers
+
+httpPOST :: Text -> RequestBody -> IO (Text, LBS.ByteString)
+httpPOST url body = http POST url (Just body) []
+
+httpPOSTWithHeaders :: Text -> RequestBody -> [(HTTP.HeaderName, BS.ByteString)] -> IO (Text, LBS.ByteString)
+httpPOSTWithHeaders url body headers = http POST url (Just body) headers
+
+httpGETWithHeadersAndBody :: Text -> RequestBody -> [(HTTP.HeaderName, BS.ByteString)] -> IO (Text, LBS.ByteString)
+httpGETWithHeadersAndBody url body headers = http GET url (Just body) headers
+
+data RequestMethod = GET | POST
+  deriving (Show, Eq)
+
+requestMethodBS :: RequestMethod -> BS.ByteString
+requestMethodBS GET = "GET"
+requestMethodBS POST = "POST"
+
+data RequestBody
+  = RawRequestBody BS.ByteString LBS.ByteString
+  | JSONRequestBody JSON.Value
+  | WWWFormUrlencodedRequestBody [(BS.ByteString, BS.ByteString)]
+  deriving (Show, Eq)
+
+setRequestBody :: RequestBody -> HTTP.Request -> HTTP.Request
+setRequestBody (RawRequestBody contentType body) =
+  HTTP.setRequestHeader "Content-Type" [contentType] .
+  HTTP.setRequestBodyLBS body
+setRequestBody (JSONRequestBody val) =
+  HTTP.setRequestBodyJSON val
+setRequestBody (WWWFormUrlencodedRequestBody dict) =
+  HTTP.setRequestBodyURLEncoded dict
+
+setRequestBodyMaybe :: Maybe RequestBody -> HTTP.Request -> HTTP.Request
+setRequestBodyMaybe Nothing = id
+setRequestBodyMaybe (Just body) = setRequestBody body
+
+appendRequestHeaders :: [(HTTP.HeaderName, BS.ByteString)] -> HTTP.Request -> HTTP.Request
+appendRequestHeaders [] = id
+appendRequestHeaders ((name, value):headers) =
+  appendRequestHeaders headers . HTTP.addRequestHeader name value
+
+http :: RequestMethod -> Text -> Maybe RequestBody -> [(HTTP.HeaderName, BS.ByteString)] -> IO (Text, LBS.ByteString)
+http method urlInitial maybeBody extraHeaders = do
   go urlInitial 12
 
   where
@@ -98,8 +145,20 @@ httpGET urlInitial = do
     go _url 0 =
       throwHTTPError "Maximum redirect count exceeded"
     go url n = do
-      printf "HTTP GET %s\n" url
-      rq <- HTTP.parseRequest (Text.unpack url)
+      printf "HTTP %s %s\n" (show method) url
+      rq <- appendRequestHeaders extraHeaders .
+            setRequestBodyMaybe maybeBody .
+            HTTP.setRequestMethod (requestMethodBS method) <$>
+              HTTP.parseRequest (Text.unpack url)
+      print $ HTTP.requestHeaders rq
+      case HTTP.requestBody rq of
+        HTTP.RequestBodyLBS lbs -> LBS.putStr lbs >> putStrLn ""
+        HTTP.RequestBodyBS bs -> BS.putStr bs >> putStrLn ""
+        HTTP.RequestBodyBuilder {} -> putStrLn "RequestBodyBuilder"
+        HTTP.RequestBodyStream {} -> putStrLn "RequestBodyStream"
+        HTTP.RequestBodyStreamChunked {} -> putStrLn "RequestBodyStreamChunked"
+        HTTP.RequestBodyIO {} -> putStrLn "RequestBodyIO"
+
       rp <- HTTP.httpLBS rq { HTTP.redirectCount = 0 }
       printf "HTTP %i %s\n"
         (HTTP.getResponseStatusCode rp)
@@ -119,6 +178,11 @@ httpGET urlInitial = do
               throwHTTPError $ "Infinite redirection (location): " <> show url
             else do
               go url' (n - 1)
+      else if HTTP.getResponseStatusCode rp >= 400 then do
+        throwHTTPError $
+          "HTTP Error: " <>
+            show (HTTP.getResponseStatusCode rp) <> " " <>
+            (Text.unpack . decodeUtf8 . HTTP.statusMessage . HTTP.getResponseStatus) rp
       else do
         let contentTypeHeaders = HTTP.getResponseHeader "Content-Type" rp
         contentTypeBS <- case contentTypeHeaders of

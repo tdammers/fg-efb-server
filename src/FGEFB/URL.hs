@@ -92,6 +92,15 @@ isAbsolutePath :: Path -> Bool
 isAbsolutePath ("":_) = True
 isAbsolutePath _ = False
 
+appendQueryMay :: Maybe QueryText -> URL -> URL
+appendQueryMay q url =
+  url
+    { urlQuery = urlQuery url <> q
+    }
+
+appendQuery :: QueryText -> URL -> URL
+appendQuery = appendQueryMay . Just
+
 parseURL :: ByteString -> Either String URL
 parseURL str
   | "//" `BS.isPrefixOf` str

@@ -203,11 +203,11 @@ htmlScrapingProvider :: ProviderContext
 htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSpecs documentSpecs =
   Provider
     { label = mlabel
-    , getPdf = \filenameEnc -> do
+    , getPdf = \_ filenameEnc -> do
         let filename = urlDecode . Text.unpack $ filenameEnc
         let localURL = either error id . parseURLText . Text.pack $ filename
         Just <$> downloadHttp (renderURLText $ rootURL <> localURL) ".pdf"
-    , listFiles = \pathEnc -> do
+    , listFiles = \_ pathEnc page -> do
         let go :: Text -> IO [FileInfo]
             go path = do
               let actualPath = if Text.null path then landingPath else path
@@ -237,7 +237,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
                   printf "Auto-following %s -> %s\n" path (renderURLText url)
                   go $ renderURLText url
         let path = Text.pack . urlDecode . Text.unpack $ pathEnc
-        go path
+        paginate page <$> go path
         
     }
     where

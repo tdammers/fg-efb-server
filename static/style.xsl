@@ -60,5 +60,35 @@
         </li>
     </xsl:for-each>
     </ul>
+    <div class="pager">
+        <xsl:if test="meta/path != ''">
+            <a>
+                <xsl:attribute name="href">
+                    /charts/api/<xsl:value-of select="meta/path" />/..
+                </xsl:attribute>
+                Up
+            </a>
+        </xsl:if>
+
+        <xsl:if test="meta/page &gt; 0">
+            <a>
+                <xsl:attribute name="href">
+                    ?p=<xsl:value-of select="meta/page - 1"/>
+                </xsl:attribute>
+                &lt;
+            </a>
+        </xsl:if>
+        <span>
+            <xsl:value-of select="meta/page + 1"/> / <xsl:value-of select="meta/numPages" />
+        </span>
+        <xsl:if test="meta/page &lt; meta/numPages - 1">
+            <a>
+                <xsl:attribute name="href">
+                    ?p=<xsl:value-of select="meta/page + 1"/>
+                </xsl:attribute>
+                &gt;
+            </a>
+        </xsl:if>
+    </div>
 </xsl:template>
 </xsl:stylesheet> 

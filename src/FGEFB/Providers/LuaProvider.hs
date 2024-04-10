@@ -54,12 +54,12 @@ luaProvider
     scriptFilename =
   Provider
     { label = mlabel
-    , getPdf = \pathEnc -> do
+    , getPdf = \_ pathEnc -> do
         let pathText = unpackParam pathEnc
         runLua "getPDF" pathText (Lua.choice [fmap Just . Lua.peekString, fmap (const Nothing) . Lua.peekNil])
-    , listFiles = \pathEnc -> do
+    , listFiles = \_ pathEnc page -> do
         let pathText = unpackParam pathEnc
-        runLua "listFiles" pathText (Lua.peekList peekFileInfo)
+        paginate page <$> runLua "listFiles" pathText (Lua.peekList peekFileInfo)
 
     }
   where

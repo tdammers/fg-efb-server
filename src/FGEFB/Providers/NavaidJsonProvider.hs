@@ -65,14 +65,13 @@ navaidJsonProvider :: Maybe Text -> Text -> Provider
 navaidJsonProvider mlabel urlPattern =
   Provider
     { label = mlabel
-    , listFiles = \dirname -> do
+    , listFiles = \_ dirname page -> do
         mparentID <- if dirname == "" then
                       return Nothing
                     else maybe (error "Invalid parentID") (return . Just) $ (readMaybe . Text.unpack) dirname
         entries <- getEntries mparentID urlPattern
-        print entries
-        return $ map entryToFileInfo entries
-    , getPdf = \filename -> do
+        return . paginate page $ map entryToFileInfo entries
+    , getPdf = \_ filename -> do
         case Text.splitOn "/" filename of
           [parentStr, childStr] -> do
             parentID <- maybe (error "Invalid parentID") return . readMaybe . Text.unpack $ parentStr

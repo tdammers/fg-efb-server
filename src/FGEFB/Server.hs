@@ -21,6 +21,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, catMaybes, listToMaybe)
 import Data.Text (Text)
+import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Text as Text
 import Data.Time (UTCTime (..), getCurrentTime)
 import qualified Data.Yaml as YAML
@@ -42,6 +43,7 @@ import qualified Web.Scotty as Scotty
 
 import FGEFB.Airac (Airac, findCurrentAiracOn, airacDetails)
 import qualified FGEFB.Airac as Airac
+import qualified FGEFB.Chartfox as Chartfox
 import FGEFB.LoadPDF
 import FGEFB.Provider
 import FGEFB.Providers
@@ -103,7 +105,7 @@ iconPNG iconName = do
         (return . LBS.fromStrict)
         (Map.lookup iconName icons)
 
-app :: Cache Text [FileInfo] -> Provider -> ScottyM ()
+app :: Cache Text FileList -> Provider -> ScottyM ()
 app listingCache provider = do
   Scotty.defaultHandler $ Scotty.Handler $ \(err :: SomeException) -> do
     Scotty.liftIO $ print err
@@ -128,20 +130,59 @@ app listingCache provider = do
     iconName <- Scotty.pathParam "icon"
     iconPNG iconName
       
+  -- chartfox auth stuff
+  Scotty.get "/chartfox/oauth/challenge" $ do
+    (challenge, verifier) <- Scotty.liftIO $ Chartfox.generateChallenge
+    Scotty.setHeader "Content-type" "text/xml"
+    Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
+      XML.Element "result" []
+        [ XML.NodeElement $
+            XML.Element "challenge" []
+              [ XML.NodeContent (decodeUtf8 challenge) ]
+        , XML.NodeElement $
+            XML.Element "verifier" []
+              [ XML.NodeContent (decodeUtf8 verifier) ]
+        ]
+
+  Scotty.get "/chartfox/oauth/token" $ do
+    code <- Scotty.queryParam "code"
+    verifier <- Scotty.queryParam "code_verifier"
+    clientID <- Scotty.queryParam "client_id"
+    tokensMay <- Scotty.liftIO $ Chartfox.getToken clientID code verifier
+    case tokensMay of
+      Nothing -> do
+        Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
+          XML.Element "error" []
+            [ XML.NodeContent "No token returned" ]
+
+      Just tokens -> do
+        Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
+          XML.Element "tokens" []
+            [ XML.NodeElement $
+                XML.Element "access" []
+                  [ XML.NodeContent (Chartfox.accessToken tokens) ]
+            , XML.NodeElement $
+                XML.Element "refresh" []
+                  [ XML.NodeContent (Chartfox.refreshToken tokens) ]
+            ]
 
   -- directory listings
   Scotty.get (Scotty.function captureListing) $ do
     dirname <- Scotty.pathParam "path"
+    page <- fromMaybe 0 <$> Scotty.queryParamMaybe "p"
+    query <- Scotty.queryParams
+    let cacheKey = dirname <> "@" <> Text.pack (show page)
     files <- Scotty.liftIO $
-      cached listingCache dirname $ listFiles provider dirname
+      cached listingCache cacheKey $ listFiles provider query dirname page
     Scotty.setHeader "Content-type" "text/xml"
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
-      xmlFileList files
+      xmlFileList dirname files
 
   -- Page metadata
   Scotty.get (Scotty.function captureFileInfo) $ do
     filename <- Scotty.pathParam "path"
-    pdfFilenameMaybe <- Scotty.liftIO $ getPdf provider filename
+    query <- Scotty.queryParams
+    pdfFilenameMaybe <- Scotty.liftIO $ getPdf provider query filename
     pdfFilename <- maybe (Scotty.next >> return undefined) return $ pdfFilenameMaybe
     pdfInfo <- Scotty.liftIO $ getPdfInfo pdfFilename
     Scotty.setHeader "Content-type" "text/xml"
@@ -151,11 +192,18 @@ app listingCache provider = do
   -- Pages rendered to JPG
   Scotty.get (Scotty.function captureRenderedPage) $ do
     filename <- Scotty.pathParam "path"
-    page <- Scotty.queryParam "p" `Scotty.catch` (\(_e :: SomeException) -> return 0)
+    query <- Scotty.queryParams
+    page <- (fromMaybe 0 <$> Scotty.queryParamMaybe "p") `Scotty.catch` (\(_e :: SomeException) -> return 0)
     ty <- Scotty.queryParam "t" `Scotty.catch` (\(_e :: SomeException) -> return "jpg")
 
-    pdfFilenameMaybe <- Scotty.liftIO $ getPdf provider filename
-    pdfFilename <- maybe (Scotty.next >> return undefined) return $ pdfFilenameMaybe
+    pdfFilenameMaybe <- Scotty.liftIO $ getPdf provider query filename
+    pdfFilename <- case pdfFilenameMaybe of
+      Nothing -> do
+        Scotty.liftIO $ putStrLn $ "PDF file not found: " ++ show filename
+        Scotty.next
+        return undefined
+      Just f ->
+        return f
 
     case ty :: Text of
       "jpg" -> do
@@ -186,9 +234,29 @@ app listingCache provider = do
           Cache.insert cache key value
           return value
 
-xmlFileList :: [FileInfo] -> XML.Element
-xmlFileList files =
-  XML.Element "listing" [] (map xmlFileEntry files)
+xmlFileList :: Text -> FileList -> XML.Element
+xmlFileList path listing =
+  XML.Element "listing" [] $
+    (xmlFileListingMeta path (fileListMeta listing)) :
+    (map xmlFileEntry $ fileListFiles listing)
+
+xmlFileListingMeta :: Text -> FileListMeta -> XML.Node
+xmlFileListingMeta path meta =
+  XML.NodeElement $
+    XML.Element "meta" [] $
+      [ XML.NodeElement $
+          XML.Element "page" []
+            [ XML.NodeContent (Text.pack . show $ fileListMetaCurrentPage meta)
+            ]
+      , XML.NodeElement $
+          XML.Element "numPages" []
+            [ XML.NodeContent (Text.pack . show $ fileListMetaNumPages meta)
+            ]
+      , XML.NodeElement $
+          XML.Element "path" []
+            [ XML.NodeContent path
+            ]
+      ]
 
 xmlFileEntry :: FileInfo -> XML.Node
 xmlFileEntry info =

@@ -52,9 +52,52 @@ defProviderContext =
 data Provider =
   Provider
     { label :: Maybe Text
-    , listFiles :: Text -> IO [FileInfo]
-    , getPdf :: Text -> IO (Maybe FilePath)
+    , listFiles :: [(Text, Text)] -> Text -> Int -> IO FileList
+    , getPdf :: [(Text, Text)] -> Text -> IO (Maybe FilePath)
     }
+
+data FileList =
+  FileList
+    { fileListFiles :: [FileInfo]
+    , fileListMeta :: FileListMeta
+    }
+    deriving (Show)
+
+data FileListMeta =
+  FileListMeta
+    { fileListMetaCurrentPage :: Int
+    , fileListMetaNumPages :: Int
+    }
+    deriving (Show)
+
+nullFileListMeta :: FileListMeta
+nullFileListMeta = FileListMeta 0 0
+
+nullFileList :: FileList
+nullFileList = FileList [] nullFileListMeta
+
+paginate :: Int -> [FileInfo] -> FileList
+paginate page files =
+  FileList
+    listedFiles
+    meta
+  where
+    (meta, listedFiles) = paginateRaw page files
+
+paginateRaw :: Int -> [a] -> (FileListMeta, [a])
+paginateRaw page files = (meta, listedFiles)
+  where
+    listedFiles =
+      if page < 0 || page >= numPages then
+        []
+      else
+        take perPage . drop (perPage * page) $ files
+    perPage = 12
+    numPages = (length files + perPage - 1) `div` perPage
+    meta = FileListMeta
+              { fileListMetaCurrentPage = page
+              , fileListMetaNumPages = numPages
+              }
 
 data FileInfo =
   FileInfo
