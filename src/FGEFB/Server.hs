@@ -50,6 +50,7 @@ import FGEFB.Providers
 import FGEFB.Providers.GroupProvider
 import FGEFB.Providers.LocalFileProvider
 import FGEFB.XmlUtil
+import FGEFB.HTTP
 
 captureListing :: Wai.Request -> Maybe [Scotty.Param]
 captureListing rq =

@@ -10,10 +10,12 @@ import Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.Default (def)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Network.Connection (TLSSettings (..))
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import qualified Network.HTTP.Types as HTTP
