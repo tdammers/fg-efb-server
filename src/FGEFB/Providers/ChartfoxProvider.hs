@@ -351,10 +351,44 @@ chartTypeFromIndex 7 = TransitionChart
 chartTypeFromIndex 99 = Briefing
 chartTypeFromIndex _ = UnknownChart
 
+chartTypeIdent :: ChartType -> Text
+chartTypeIdent UnknownChart = "OTHER"
+chartTypeIdent GeneralChart = "GEN"
+chartTypeIdent TextualChart = "TXT"
+chartTypeIdent GroundLayoutChart = "GND"
+chartTypeIdent SIDChart = "SID"
+chartTypeIdent STARChart = "STAR"
+chartTypeIdent ApproachChart = "APP"
+chartTypeIdent TransitionChart = "TRANS"
+chartTypeIdent Briefing = "BRIEFING"
+
+chartTypeFromIdent :: Text -> ChartType
+chartTypeFromIdent "GEN" = GeneralChart
+chartTypeFromIdent "TXT" = TextualChart
+chartTypeFromIdent "GND" = GroundLayoutChart
+chartTypeFromIdent "SID" = SIDChart
+chartTypeFromIdent "STAR" = STARChart
+chartTypeFromIdent "APP" = ApproachChart
+chartTypeFromIdent "TRANS" = TransitionChart
+chartTypeFromIdent "BRIEFING" = Briefing
+chartTypeFromIdent _ = UnknownChart
+
+chartTypeName :: ChartType -> Text
+chartTypeName UnknownChart = "Other"
+chartTypeName GeneralChart = "General"
+chartTypeName TextualChart = "Text"
+chartTypeName GroundLayoutChart = "Ground"
+chartTypeName SIDChart = "SID"
+chartTypeName STARChart = "STAR"
+chartTypeName ApproachChart = "Approach"
+chartTypeName TransitionChart = "Transition"
+chartTypeName Briefing = "Briefing"
+
 chartFileTypeFromIndex :: Int -> ChartFileType
 chartFileTypeFromIndex 0 = ChartFilePDF
 chartFileTypeFromIndex 1 = ChartFileIMG
 chartFileTypeFromIndex _ = ChartFileUnknown
+
 
 data ChartInfo =
   ChartInfo
@@ -411,6 +445,25 @@ data ResponseMeta =
     , metaPrevPageUrl :: Maybe Text
     }
     deriving (Show)
+
+defResponseMeta :: ResponseMeta
+defResponseMeta =
+  ResponseMeta
+    { metaPath = ""
+
+    , metaFrom = 0
+    , metaTo = 0
+    , metaTotal = 0
+    , metaPerPage = 0
+
+    , metaCurrentPage = 0
+    , metaLastPage = 0
+
+    , metaFirstPageUrl = Nothing
+    , metaLastPageUrl = Nothing
+    , metaNextPageUrl = Nothing
+    , metaPrevPageUrl = Nothing
+    }
 
 data DataResponse a =
   DataResponse
@@ -485,7 +538,7 @@ instance JSON.FromJSON a => JSON.FromJSON (DataResponse a) where
   parseJSON = JSON.withObject "DataResponse" $ \obj ->
     DataResponse
       <$> obj .: "data"
-      <*> obj .: "meta"
+      <*> (fromMaybe defResponseMeta <$> obj .:? "meta")
 
 fetchPage :: forall a.
              JSON.FromJSON a
@@ -513,7 +566,7 @@ fetch :: forall a.
       => Text
       -> Text
       -> [(Text, Maybe Text)]
-      -> IO (ResponseMeta, [a])
+      -> IO (ResponseMeta, a)
 fetch bearerToken url query = do
     response <- either error return =<< Chartfox.apiCall
                   bearerToken
@@ -571,7 +624,9 @@ chartToFileInfo :: ChartInfo -> FileInfo
 chartToFileInfo chart =
   FileInfo
     { fileName = chartInfoName chart
-    , filePath = chartInfoAirportICAO chart <> "/" <> chartInfoID chart
+    , filePath = chartInfoAirportICAO chart <> "/" <> 
+                    chartTypeIdent (chartInfoType chart) <> "/" <>
+                    chartInfoID chart
     , fileType = PDFFile
     }
 
@@ -588,14 +643,35 @@ airportToFileInfo airport =
 
 listAirport :: Text -> Text -> Int -> IO FileList
 listAirport bearerToken icao page = do
-  (meta, charts) <- fetchPaginate bearerToken url [] page
+  (_, chartsGrouped :: Map Int [ChartInfo]) <- fetch bearerToken url []
+  return FileList
+    { fileListFiles =
+        [ FileInfo
+            { fileName = icao <> " " <> chartTypeName t
+            , filePath = icao <> "/" <> chartTypeIdent t
+            , fileType = Directory
+            }
+        | i <- Map.keys chartsGrouped
+        , let t = chartTypeFromIndex i
+        ]
+    , fileListMeta = nullFileListMeta
+    }
+  where
+    sortCharts = sortOn (\c -> (chartInfoType c, chartInfoCode c, chartInfoName c))
+    url = "/v2/airports/" <> icao <> "/charts/grouped"
+
+listAirportCharts :: Text -> Text -> ChartType -> Int -> IO FileList
+listAirportCharts bearerToken icao chartType page = do
+  (_, chartsGrouped) <- fetch bearerToken url []
+  let chartsRaw = fromMaybe [] $ Map.lookup (chartTypeIndex chartType) chartsGrouped
+  let (meta, charts) = paginateRaw page chartsRaw
   return FileList
     { fileListFiles = map chartToFileInfo . sortCharts  $ charts
     , fileListMeta = meta
     }
   where
     sortCharts = sortOn (\c -> (chartInfoType c, chartInfoCode c, chartInfoName c))
-    url = "/v2/airports/" <> icao <> "/charts"
+    url = "/v2/airports/" <> icao <> "/charts/grouped"
 
 downloadChart :: Text -> Text -> IO (Maybe FilePath)
 downloadChart bearerToken chartID = do
@@ -646,6 +722,8 @@ chartfoxProvider labelMay = Provider
           listAirports bearerToken item page
         [item] ->
           listAirport bearerToken item page
+        [item, tyIdent] | ty <- chartTypeFromIdent tyIdent ->
+          listAirportCharts bearerToken item ty page
         x -> do
           print x
           return $ FileList [] nullFileListMeta
@@ -654,6 +732,8 @@ chartfoxProvider labelMay = Provider
       let pathParts = Text.splitOn "/" path
       print pathParts
       case pathParts of
+        [_icao, _type, chartID] ->
+          downloadChart bearerToken chartID
         [_icao, chartID] ->
           downloadChart bearerToken chartID
         _ ->
