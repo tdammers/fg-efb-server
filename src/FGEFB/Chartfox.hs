@@ -10,6 +10,7 @@ import qualified Crypto.Random.Entropy as Crypto
 import Crypto.Hash.Algorithms (SHA256)
 import qualified Data.ByteString as BS
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Char
 import Data.Word
 import Data.Bits

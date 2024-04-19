@@ -19,7 +19,7 @@ import Data.FileEmbed
 import Data.Hashable (Hashable)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe, catMaybes, listToMaybe)
+import Data.Maybe (fromMaybe, catMaybes, listToMaybe, maybeToList)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Text as Text
@@ -171,8 +171,9 @@ app listingCache provider = do
   Scotty.get (Scotty.function captureListing) $ do
     dirname <- Scotty.pathParam "path"
     page <- fromMaybe 0 <$> Scotty.queryParamMaybe "p"
+    search <- maybe "" (":" <>) <$> Scotty.queryParamMaybe "q"
     query <- Scotty.queryParams
-    let cacheKey = dirname <> "@" <> Text.pack (show page)
+    let cacheKey = dirname <> ":" <> Text.pack (show page) <> search
     files <- Scotty.liftIO $
       cached listingCache cacheKey $ listFiles provider query dirname page
     Scotty.setHeader "Content-type" "text/xml"
@@ -258,6 +259,13 @@ xmlFileListingMeta path meta =
             [ XML.NodeContent path
             ]
       ]
+      ++ maybeToList (do
+            searchPath <- fileListMetaSearchPath meta
+            return $ XML.NodeElement $
+              XML.Element "searchPath" []
+                [ XML.NodeContent $ "/charts/api/" <> searchPath
+                ]
+          )
 
 xmlFileEntry :: FileInfo -> XML.Node
 xmlFileEntry info =

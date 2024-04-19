@@ -36,6 +36,10 @@ getBearerToken query =
   maybe (error "No bearer token provided, log into chartfox first") return $
     lookup "chartfoxToken" query
 
+getSearchQuery :: [(Text, Text)] -> Maybe Text
+getSearchQuery query =
+  lookup "q" query
+
 topLevelCodes :: Map Text Text
 topLevelCodes = Map.fromList
   [ ("AF", "Afghanistan")
@@ -291,7 +295,7 @@ topLevelCodes = Map.fromList
 
 listTopLevel :: Int -> IO FileList
 listTopLevel page =
-  return . paginate page . map toFileEntry . sortOn snd . Map.toAscList $ topLevelCodes
+  return . setFileListSearchPath "search" . paginate page . map toFileEntry . sortOn snd . Map.toAscList $ topLevelCodes
   where
     toFileEntry (path, name) =
       FileInfo
@@ -470,7 +474,7 @@ instance JSON.FromJSON ResponseMeta where
       <*> obj .: "last_page_url"
       <*> obj .: "next_page_url"
       <*> obj .: "prev_page_url"
-    
+
 instance JSON.FromJSON ChartFileInfo where
   parseJSON = JSON.withObject "ChartFileInfo" $ \obj ->
     ChartFileInfo
@@ -521,18 +525,21 @@ fetch bearerToken url query = do
 
 responseMetaToFileListMeta :: ResponseMeta -> FileListMeta
 responseMetaToFileListMeta rm =
-  FileListMeta
+  nullFileListMeta
     { fileListMetaCurrentPage = metaCurrentPage rm - 1
     , fileListMetaNumPages = metaLastPage rm
     }
 
 listAirports :: Text -> Text -> Int -> IO FileList
 listAirports bearerToken countryCode page = do
-  (meta, airports) <- 
+  (meta, airports) <-
     fetchPage bearerToken url query page
   return FileList
-    { fileListFiles = map airportToFileInfo . sortAirports $ airports
-    , fileListMeta = responseMetaToFileListMeta meta
+    { fileListFiles =
+        map airportToFileInfo . sortAirports $ airports
+    , fileListMeta =
+        setFileListMetaSearchPath "search" $
+          responseMetaToFileListMeta meta
     }
 
   where
@@ -541,7 +548,25 @@ listAirports bearerToken countryCode page = do
     query = [ ("isoCountry", Just countryCode)
             , ("supported", Just "1")
             ]
-        
+
+listSearch :: Text -> Text -> Int -> IO FileList
+listSearch bearerToken searchQuery page = do
+  (meta, airports) <-
+    fetchPage bearerToken url query page
+  return FileList
+    { fileListFiles = map airportToFileInfo . sortAirports $ airports
+    , fileListMeta =
+        setFileListMetaSearchPath "search" $
+          responseMetaToFileListMeta meta
+    }
+
+  where
+    url = "/v2/airports"
+    sortAirports = sortOn airportInfoICAO
+    query = [ ("query", Just searchQuery)
+            , ("supported", Just "1")
+            ]
+
 chartToFileInfo :: ChartInfo -> FileInfo
 chartToFileInfo chart =
   FileInfo
@@ -608,11 +633,21 @@ chartfoxProvider labelMay = Provider
           listTopLevel page
         [""] ->
           listTopLevel page
+        ["search"] -> do
+          print "Search"
+          case getSearchQuery query of
+            Nothing -> do
+              print "No search query"
+              return $ setFileListSearchPath "search" nullFileList
+            Just searchQuery -> do
+              print searchQuery
+              listSearch bearerToken searchQuery page
         [item] | Text.length item < 4 ->
           listAirports bearerToken item page
         [item] ->
           listAirport bearerToken item page
-        _ ->
+        x -> do
+          print x
           return $ FileList [] nullFileListMeta
   , getPdf = \query path -> do
       bearerToken <- getBearerToken query

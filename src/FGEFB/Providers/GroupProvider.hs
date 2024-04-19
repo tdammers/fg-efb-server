@@ -23,6 +23,8 @@ groupProvider mlabel providers = Provider
             Nothing -> return Nothing
             Just provider -> getPdf provider query subpath
   , listFiles = \query path page -> do
+      print path
+      print query
       case Text.splitOn "/" path of
         [] -> return (paginate page $ providerList)
         [""] -> return (paginate page $ providerList)
@@ -38,9 +40,15 @@ groupProvider mlabel providers = Provider
                   [ i { filePath = providerID <> "/" <> filePath i }
                   | i <- infos
                   ]
-                  meta
+                  (amendMetaSearchPath providerID meta)
   }
   where
+    amendMetaSearchPath providerID meta =
+      meta
+        { fileListMetaSearchPath = do
+            path <- fileListMetaSearchPath meta
+            return $ providerID <> "/" <> path
+        }
     providerList =
       [ FileInfo
           { fileName = fromMaybe providerID $ label provider

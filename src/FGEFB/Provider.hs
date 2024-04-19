@@ -67,14 +67,24 @@ data FileListMeta =
   FileListMeta
     { fileListMetaCurrentPage :: Int
     , fileListMetaNumPages :: Int
+    , fileListMetaSearchPath :: Maybe Text
     }
     deriving (Show)
 
 nullFileListMeta :: FileListMeta
-nullFileListMeta = FileListMeta 0 0
+nullFileListMeta = FileListMeta 0 0 Nothing
 
 nullFileList :: FileList
 nullFileList = FileList [] nullFileListMeta
+
+setFileListSearchPath :: Text -> FileList -> FileList
+setFileListSearchPath path fileList =
+  fileList
+    { fileListMeta = setFileListMetaSearchPath path $ fileListMeta fileList }
+
+setFileListMetaSearchPath :: Text -> FileListMeta -> FileListMeta
+setFileListMetaSearchPath path meta =
+  meta { fileListMetaSearchPath = Just path }
 
 paginate :: Int -> [FileInfo] -> FileList
 paginate page files =
@@ -94,7 +104,7 @@ paginateRaw page files = (meta, listedFiles)
         take perPage . drop (perPage * page) $ files
     perPage = 12
     numPages = (length files + perPage - 1) `div` perPage
-    meta = FileListMeta
+    meta = nullFileListMeta
               { fileListMetaCurrentPage = page
               , fileListMetaNumPages = numPages
               }
