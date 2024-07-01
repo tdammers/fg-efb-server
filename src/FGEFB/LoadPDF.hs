@@ -10,6 +10,7 @@ import qualified Data.ByteString as BS
 import System.Directory (doesFileExist)
 import Text.Printf (printf)
 import System.Environment (lookupEnv)
+import System.FilePath
 import System.Exit (ExitCode (..))
 import Data.Bool (bool)
 import Data.Maybe (fromMaybe)
@@ -39,25 +40,44 @@ loadPdfPageHttp url page = do
 
 convertPdfPage :: FilePath -> Int -> FilePath -> IO Bool
 convertPdfPage path page output = do
-  magick <- fromMaybe "magick" <$> lookupEnv "MAGICK_BINARY"
+
+  -- magick <- fromMaybe "magick" <$> lookupEnv "MAGICK_BINARY"
+  -- printf "CONVERT %s\n" path
+  -- let args = [ "-limit", "area", "512MiB"
+  --            , "-limit", "disk", "2GiB"
+  --            , "-define", "pdf:use-cropbox=true"
+  --            , "-background", "blue"
+  --            , "-density"
+  --            , "300"
+  --            , path ++ "[" ++ show page ++ "]"
+  --            , "-colorspace", "RGB"
+  --            , "-depth", "24"
+  --            , "-quality", "90"
+  --            , "-thumbnail", "4096x4096"
+  --            , "-gravity", "center"
+  --            , "-extent", "4096x4096"
+  --            , output
+  --            ]
+  -- putStrLn $ Process.showCommandForUser magick args
+  -- (exitCode, _out, err) <-
+  --     Process.readProcessWithExitCode magick args ""
+
+  pdftoppm <- fromMaybe "pdftoppm" <$> lookupEnv "PDFTOPPM_BINARY"
   printf "CONVERT %s\n" path
-  let args = [ "-limit", "area", "512MiB"
-             , "-limit", "disk", "2GiB"
-             , "-background", "white"
-             , "-density"
-             , "300"
-             , path ++ "[" ++ show page ++ "]"
-             , "-colorspace", "RGB"
-             , "-depth", "24"
-             , "-quality", "90"
-             , "-thumbnail", "4096x4096"
-             , "-gravity", "center"
-             , "-extent", "4096x4096"
-             , output
+  let args = [ "-jpeg"
+             , "-cropbox"
+             , "-f", show (page + 1)
+             , "-l", show (page + 1)
+             , "-singlefile"
+             , "-r", "300"
+             , "-scale-to", "4096"
+             , path
+             , dropExtension output
              ]
-  putStrLn $ Process.showCommandForUser magick args
+  putStrLn $ Process.showCommandForUser pdftoppm args
   (exitCode, _out, err) <-
-      Process.readProcessWithExitCode magick args ""
+      Process.readProcessWithExitCode pdftoppm args ""
+
   case exitCode of
     ExitSuccess -> do
       return True

@@ -81,7 +81,7 @@ getToken clientID code verifier = do
         , ("client_id", clientID)
         , ("code", code)
         , ("code_verifier", verifier)
-        , ("redirect_uri", "http://localhost:10000/aircraft-dir/WebPanel/chartfox_oauth.html")
+        , ("redirect_uri", "http://localhost:10000/fg-home/Export/efbapps/chartfox/chartfox_oauth.html")
         ]
   (_finalUrl, content) <-
     httpPOST "https://api.chartfox.org/oauth/token"

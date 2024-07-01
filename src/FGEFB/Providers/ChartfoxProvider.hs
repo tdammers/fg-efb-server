@@ -298,7 +298,7 @@ listTopLevel page =
   return . setFileListSearchPath "search" . paginate page . map toFileEntry . sortOn snd . Map.toAscList $ topLevelCodes
   where
     toFileEntry (path, name) =
-      FileInfo
+      defFileInfo
         { fileName = name
         , filePath = path
         , fileType = Directory
@@ -398,6 +398,7 @@ data ChartInfo =
     , chartInfoName :: Text
     , chartInfoCode :: Maybe Text
     , chartInfoType :: ChartType
+    , chartInfoGeorefs :: [ChartGeoRef]
     }
 
 data ChartDetails =
@@ -412,7 +413,17 @@ data ChartDetails =
     , chartDetailsSourceURL :: Maybe Text
     , chartDetailsSourceURLType :: Maybe ChartFileType
     , chartDetailsFiles :: [ChartFileInfo]
-    -- TODO: geo refs
+    , chartDetailsGeorefs :: [ChartGeoRef]
+    }
+
+data ChartGeoRef =
+  ChartGeoRef
+    { chartGeoTX :: Double
+    , chartGeoTY :: Double
+    , chartGeoK :: Double
+    , chartGeoTransformAngle :: Double
+    , chartGeoPdfPageRotation :: Double
+    , chartGeoPage :: Int
     }
 
 data ChartFileType
@@ -498,6 +509,7 @@ instance JSON.FromJSON ChartInfo where
       <*> obj .: "name"
       <*> obj .: "code"
       <*> obj .: "type"
+      <*> (fromMaybe [] <$> obj .:? "georefs")
 
 instance JSON.FromJSON ChartDetails where
   parseJSON = JSON.withObject "ChartDetails" $ \obj ->
@@ -512,6 +524,7 @@ instance JSON.FromJSON ChartDetails where
       <*> obj .: "source_url"
       <*> obj .: "source_url_type"
       <*> (fromMaybe [] <$> obj .:? "files")
+      <*> (fromMaybe [] <$> obj .:? "georefs")
 
 instance JSON.FromJSON ResponseMeta where
   parseJSON = JSON.withObject "ResponseMeta" $ \obj ->
@@ -533,6 +546,16 @@ instance JSON.FromJSON ChartFileInfo where
     ChartFileInfo
       <$> obj .: "type"
       <*> obj .: "url"
+
+instance JSON.FromJSON ChartGeoRef where
+  parseJSON = JSON.withObject "ChartGeoRef" $ \obj ->
+    ChartGeoRef
+      <$> obj .: "tx"
+      <*> obj .: "ty"
+      <*> obj .: "k"
+      <*> obj .: "transform_angle"
+      <*> obj .: "pdf_page_rotation"
+      <*> obj .: "page"
 
 instance JSON.FromJSON a => JSON.FromJSON (DataResponse a) where
   parseJSON = JSON.withObject "DataResponse" $ \obj ->
@@ -622,7 +645,7 @@ listSearch bearerToken searchQuery page = do
 
 chartToFileInfo :: ChartInfo -> FileInfo
 chartToFileInfo chart =
-  FileInfo
+  defFileInfo
     { fileName = chartInfoName chart
     , filePath = chartInfoAirportICAO chart <> "/" <> 
                     chartTypeIdent (chartInfoType chart) <> "/" <>
@@ -630,9 +653,29 @@ chartToFileInfo chart =
     , fileType = PDFFile
     }
 
+chartGeoRefsToFileGeoRefs :: [ChartGeoRef] -> Map Int FileGeoRef
+chartGeoRefsToFileGeoRefs [] = mempty
+chartGeoRefsToFileGeoRefs (chartGeo:xs) =
+  Map.insert page fileGeo (chartGeoRefsToFileGeoRefs xs)
+  where
+    (page, fileGeo) = chartGeoRefToFileGeoRef chartGeo
+
+chartGeoRefToFileGeoRef :: ChartGeoRef -> (Int, FileGeoRef)
+chartGeoRefToFileGeoRef chartGeo =
+  ( chartGeoPage chartGeo
+  , FileGeoRef
+      { fileGeoTX = chartGeoTX chartGeo
+      , fileGeoTY = chartGeoTY chartGeo
+      , fileGeoK = chartGeoK chartGeo
+      , fileGeoTransformAngle = chartGeoTransformAngle chartGeo
+      , fileGeoPdfPageRotation = chartGeoPdfPageRotation chartGeo
+      }
+  )
+
+
 airportToFileInfo :: AirportInfo -> FileInfo
 airportToFileInfo airport =
-  FileInfo
+  defFileInfo
     { fileName = fromMaybe "???" $ do
         ident <- airportInfoICAO airport
         name <- airportInfoName airport
@@ -646,7 +689,7 @@ listAirport bearerToken icao page = do
   (_, chartsGrouped :: Map Int [ChartInfo]) <- fetch bearerToken url []
   return FileList
     { fileListFiles =
-        [ FileInfo
+        [ defFileInfo
             { fileName = icao <> " " <> chartTypeName t
             , filePath = icao <> "/" <> chartTypeIdent t
             , fileType = Directory
@@ -673,23 +716,27 @@ listAirportCharts bearerToken icao chartType page = do
     sortCharts = sortOn (\c -> (chartInfoType c, chartInfoCode c, chartInfoName c))
     url = "/v2/airports/" <> icao <> "/charts/grouped"
 
-downloadChart :: Text -> Text -> IO (Maybe FilePath)
+downloadChart :: Text -> Text -> IO (Maybe FileDetails)
 downloadChart bearerToken chartID = do
   infoEither <- Chartfox.apiCall bearerToken ("/v2/charts/" <> chartID) []
   case infoEither of
-    Right info -> do
-      case (filter isPdf $ chartDetailsFiles info) of
+    Right info -> runMaybeT $ do
+      path <- case (filter isPdf $ chartDetailsFiles info) of
         ChartFileInfo { chartFileURL = url }:_ -> do
-          print url
-          Just <$> downloadHttp url ".pdf"
+          liftIO $ print url
+          liftIO $ downloadHttp url ".pdf"
         [] -> do
-          runMaybeT $ do
-            url <- MaybeT $ pure (chartDetailsSourceURL info)
-            ty <- MaybeT $ pure (chartDetailsSourceURLType info)
-            if ty == ChartFilePDF then
-              liftIO $ downloadHttp url ".pdf"
-            else
-              fail "No chart"
+          url <- MaybeT $ pure (chartDetailsSourceURL info)
+          ty <- MaybeT $ pure (chartDetailsSourceURLType info)
+          if ty == ChartFilePDF then do
+            liftIO $ print url
+            liftIO $ downloadHttp url ".pdf"
+          else
+            fail "No chart"
+      return $ FileDetails
+        { fileDetailsPath = path
+        , fileDetailsGeorefs = chartGeoRefsToFileGeoRefs (chartDetailsGeorefs info)
+        }
     Left err -> do
       print err
       return Nothing

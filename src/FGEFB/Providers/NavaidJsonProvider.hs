@@ -32,7 +32,7 @@ JSON.deriveJSON JSON.defaultOptions {JSON.fieldLabelModifier = drop 6} 'Entry
 
 entryToFileInfo :: Entry -> FileInfo
 entryToFileInfo entry =
-  FileInfo
+  defFileInfo
     { fileName = entry_title entry
     , filePath =
         if entry_isDir entry then
@@ -79,7 +79,7 @@ navaidJsonProvider mlabel urlPattern =
             entries <- getEntries (Just parentID) urlPattern
             case filter (\e -> entry_id e == childID) entries of
               [Entry { entry_href = Just href }] -> do
-                Just <$> downloadHttp href ".pdf"
+                Just . simpleFileDetails <$> downloadHttp href ".pdf"
               _ -> error "Not found"
           _ -> error "Not found"
     }

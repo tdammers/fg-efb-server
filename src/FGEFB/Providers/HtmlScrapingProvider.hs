@@ -206,7 +206,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
     , getPdf = \_ filenameEnc -> do
         let filename = urlDecode . Text.unpack $ filenameEnc
         let localURL = either error id . parseURLText . Text.pack $ filename
-        Just <$> downloadHttp (renderURLText $ rootURL <> localURL) ".pdf"
+        Just . simpleFileDetails <$> downloadHttp (renderURLText $ rootURL <> localURL) ".pdf"
     , listFiles = \_ pathEnc page -> do
         let go :: Text -> IO [FileInfo]
             go path = do
@@ -254,7 +254,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
 
       makeLink :: Bool -> URL -> (Text, URL, Bool) -> FileInfo
       makeLink isDir currentURL (linkLabel, linkUrl, _) =
-        FileInfo
+        defFileInfo
            { fileName = Text.unwords . Text.words $ linkLabel
            , filePath = path
            , fileType = if isDir then Directory else PDFFile

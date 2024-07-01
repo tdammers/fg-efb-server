@@ -34,7 +34,7 @@ peekFileInfo :: Lua.LuaError e => Lua.Peeker e FileInfo
 peekFileInfo index = do
   m :: Map Text Text <- Lua.peekMap Lua.safepeek Lua.safepeek index
   let fileInfoMaybe =
-        FileInfo
+        fileInfo
           <$> Map.lookup "name" m
           <*> Map.lookup "path" m
           <*> (Map.lookup "type" m >>= \case
@@ -56,7 +56,7 @@ luaProvider
     { label = mlabel
     , getPdf = \_ pathEnc -> do
         let pathText = unpackParam pathEnc
-        runLua "getPDF" pathText (Lua.choice [fmap Just . Lua.peekString, fmap (const Nothing) . Lua.peekNil])
+        fmap simpleFileDetails <$> runLua "getPDF" pathText (Lua.choice [fmap Just . Lua.peekString, fmap (const Nothing) . Lua.peekNil])
     , listFiles = \_ pathEnc page -> do
         let pathText = unpackParam pathEnc
         paginate page <$> runLua "listFiles" pathText (Lua.peekList peekFileInfo)

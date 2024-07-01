@@ -18,7 +18,7 @@ classifyFile rootdir dirname f = do
   doesDirectoryExist fullname >>= \case
     True ->
       return $
-        Just FileInfo
+        Just defFileInfo
           { filePath = Text.pack qname
           , fileName = Text.pack f
           , fileType = Directory
@@ -27,7 +27,7 @@ classifyFile rootdir dirname f = do
       case takeExtension f of
         ".pdf" ->
           return $
-            Just FileInfo
+            Just defFileInfo
               { filePath = Text.pack qname
               , fileName = Text.pack $ takeBaseName f
               , fileType = PDFFile
@@ -43,7 +43,7 @@ localFileProvider mlabel rootDir =
         listDirectory (rootDir </> dirname) >>=
           (fmap (paginate page . catMaybes) . mapM (classifyFile rootDir dirname))
     , getPdf = \_ filename -> do
-        return . Just $ rootDir </> Text.unpack filename
+        return . Just . simpleFileDetails $ rootDir </> Text.unpack filename
     }
 
 

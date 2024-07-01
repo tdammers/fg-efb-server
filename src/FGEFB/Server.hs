@@ -7,7 +7,7 @@ module FGEFB.Server
 where
 
 import Control.Exception
-import Control.Monad (forM_)
+import Control.Monad (forM_, when)
 import qualified Data.Aeson as JSON
 import Data.Bool (bool)
 import Data.ByteString (ByteString)
@@ -37,6 +37,7 @@ import System.Environment (setEnv, lookupEnv)
 import System.FilePath ( (</>) )
 import System.IO (hPutStrLn, stderr)
 import System.IO.Temp (withSystemTempDirectory)
+import Text.Printf (printf)
 import qualified Text.XML as XML
 import Web.Scotty (ScottyM, scotty)
 import qualified Web.Scotty as Scotty
@@ -184,12 +185,12 @@ app listingCache provider = do
   Scotty.get (Scotty.function captureFileInfo) $ do
     filename <- Scotty.pathParam "path"
     query <- Scotty.queryParams
-    pdfFilenameMaybe <- Scotty.liftIO $ getPdf provider query filename
-    pdfFilename <- maybe (Scotty.next >> return undefined) return $ pdfFilenameMaybe
-    pdfInfo <- Scotty.liftIO $ getPdfInfo pdfFilename
+    pdfDetailsMaybe <- Scotty.liftIO $ getPdf provider query filename
+    pdfDetails <- maybe (Scotty.next >> return undefined) return $ pdfDetailsMaybe
+    pdfInfo <- Scotty.liftIO $ getPdfInfo (fileDetailsPath pdfDetails)
     Scotty.setHeader "Content-type" "text/xml"
     Scotty.raw . XML.renderLBS def . xmlFragmentToDocument $
-      xmlFileInfo filename pdfInfo
+      xmlFileInfo pdfDetails pdfInfo
 
   -- Pages rendered to JPG
   Scotty.get (Scotty.function captureRenderedPage) $ do
@@ -198,14 +199,15 @@ app listingCache provider = do
     page <- (fromMaybe 0 <$> Scotty.queryParamMaybe "p") `Scotty.catch` (\(_e :: SomeException) -> return 0)
     ty <- Scotty.queryParam "t" `Scotty.catch` (\(_e :: SomeException) -> return "jpg")
 
-    pdfFilenameMaybe <- Scotty.liftIO $ getPdf provider query filename
-    pdfFilename <- case pdfFilenameMaybe of
+    pdfDetailsMaybe <- Scotty.liftIO $ getPdf provider query filename
+    pdfDetails <- case pdfDetailsMaybe of
       Nothing -> do
         Scotty.liftIO $ putStrLn $ "PDF file not found: " ++ show filename
         Scotty.next
         return undefined
       Just f ->
         return f
+    let pdfFilename = fileDetailsPath pdfDetails
 
     case ty :: Text of
       "jpg" -> do
@@ -274,26 +276,46 @@ xmlFileEntry info =
       XML.NodeElement $
         XML.Element "directory"
           []
-          [ XML.NodeElement $ XML.Element "name" [] [ XML.NodeContent (fileName info) ]
-          , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent ("/charts/api/" <> filePath info) ]
-          , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent "directory" ]
-          ]
+          (
+            [ XML.NodeElement $ XML.Element "name" [] [ XML.NodeContent (fileName info) ]
+            , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent ("/charts/api/" <> filePath info) ]
+            , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent "directory" ]
+            ]
+          )
     PDFFile ->
       XML.NodeElement $
         XML.Element "file"
           []
-          [ XML.NodeElement $ XML.Element "name" [] [ XML.NodeContent (fileName info) ]
-          , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent ("/charts/files/" <> filePath info) ]
-          , XML.NodeElement $ XML.Element "meta" [] [ XML.NodeContent ("/charts/meta/" <> filePath info) ]
-          , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent "pdf" ]
-          ]
+          (
+            [ XML.NodeElement $ XML.Element "name" [] [ XML.NodeContent (fileName info) ]
+            , XML.NodeElement $ XML.Element "path" [] [ XML.NodeContent ("/charts/files/" <> filePath info) ]
+            , XML.NodeElement $ XML.Element "meta" [] [ XML.NodeContent ("/charts/meta/" <> filePath info) ]
+            , XML.NodeElement $ XML.Element "type" [] [ XML.NodeContent "pdf" ]
+            ]
+          )
 
-xmlFileInfo :: Text -> [(Text, Text)] -> XML.Element
-xmlFileInfo filename infos =
+xmlFileGeorefs :: Map Int FileGeoRef -> [XML.Node]
+xmlFileGeorefs georefs =
+  [ XML.NodeElement $
+      XML.Element "georef" []
+      [ XML.NodeElement $ XML.Element "tx" [] [ XML.NodeContent (Text.pack $ printf "%1.12f" $ fileGeoTX item) ]
+      , XML.NodeElement $ XML.Element "ty" [] [ XML.NodeContent (Text.pack $ printf "%1.12f" $ fileGeoTY item) ]
+      , XML.NodeElement $ XML.Element "k" [] [ XML.NodeContent (Text.pack $ printf "%1.12f" $ fileGeoK item) ]
+      , XML.NodeElement $ XML.Element "ta" [] [ XML.NodeContent (Text.pack $ printf "%1.12f" $ fileGeoTransformAngle item) ]
+      , XML.NodeElement $ XML.Element "pageRotation" [] [ XML.NodeContent (Text.pack $ printf "%1.12f" $ fileGeoPdfPageRotation item) ]
+      , XML.NodeElement $ XML.Element "page" [] [ XML.NodeContent (Text.pack $ printf "%i" $ page) ]
+      ]
+  | (page, item) <- Map.toAscList georefs
+  ]
+
+xmlFileInfo :: FileDetails -> [(Text, Text)] -> XML.Element
+xmlFileInfo details infos =
   XML.Element "meta"
     []
     (
-      [ XML.NodeElement $ XML.Element "filename" [] [ XML.NodeContent filename ] ]
+      [ XML.NodeElement $ XML.Element "filename" []
+          [ XML.NodeContent . Text.pack $ fileDetailsPath details ]
+      ]
       <>
       [ XML.NodeElement $ XML.Element "property"
           [ ("name", k)
@@ -302,6 +324,8 @@ xmlFileInfo filename infos =
           []
       | (k, v) <- infos
       ]
+      <>
+      xmlFileGeorefs (fileDetailsGeorefs details)
     )
 
 xmlProviderList :: Map Text Provider -> XML.Element
@@ -311,7 +335,7 @@ xmlProviderList providers =
 xmlProviderEntry :: (Text, Provider) -> XML.Node
 xmlProviderEntry (key, provider) =
   xmlFileEntry
-    FileInfo
+    defFileInfo
       { fileName = fromMaybe key (label provider)
       , filePath = key
       , fileType = Directory

@@ -53,7 +53,7 @@ data Provider =
   Provider
     { label :: Maybe Text
     , listFiles :: [(Text, Text)] -> Text -> Int -> IO FileList
-    , getPdf :: [(Text, Text)] -> Text -> IO (Maybe FilePath)
+    , getPdf :: [(Text, Text)] -> Text -> IO (Maybe FileDetails)
     }
 
 data FileList =
@@ -70,6 +70,15 @@ data FileListMeta =
     , fileListMetaSearchPath :: Maybe Text
     }
     deriving (Show)
+
+data FileDetails =
+  FileDetails
+    { fileDetailsPath :: FilePath
+    , fileDetailsGeorefs :: Map Int FileGeoRef
+    }
+
+simpleFileDetails :: FilePath -> FileDetails
+simpleFileDetails path = FileDetails path mempty
 
 nullFileListMeta :: FileListMeta
 nullFileListMeta = FileListMeta 0 0 Nothing
@@ -114,6 +123,24 @@ data FileInfo =
     { fileName :: Text
     , filePath :: Text
     , fileType :: FileType
+    }
+    deriving (Show)
+
+fileInfo :: Text -> Text -> FileType -> FileInfo
+fileInfo name path ty =
+  FileInfo name path ty
+
+defFileInfo :: FileInfo
+defFileInfo =
+  FileInfo "" "" PDFFile
+
+data FileGeoRef =
+  FileGeoRef
+    { fileGeoTX :: Double
+    , fileGeoTY :: Double
+    , fileGeoK :: Double
+    , fileGeoTransformAngle :: Double
+    , fileGeoPdfPageRotation :: Double
     }
     deriving (Show)
 

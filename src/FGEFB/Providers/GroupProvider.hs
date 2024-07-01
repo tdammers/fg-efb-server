@@ -50,7 +50,7 @@ groupProvider mlabel providers = Provider
             return $ providerID <> "/" <> path
         }
     providerList =
-      [ FileInfo
+      [ defFileInfo
           { fileName = fromMaybe providerID $ label provider
           , fileType = Directory
           , filePath = providerID
