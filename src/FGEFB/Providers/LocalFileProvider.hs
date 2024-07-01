@@ -44,6 +44,7 @@ localFileProvider mlabel rootDir =
           (fmap (paginate page . catMaybes) . mapM (classifyFile rootDir dirname))
     , getPdf = \_ filename -> do
         return . Just . simpleFileDetails $ rootDir </> Text.unpack filename
+    , available = const True
     }
 
 

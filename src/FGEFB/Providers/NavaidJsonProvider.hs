@@ -82,4 +82,5 @@ navaidJsonProvider mlabel urlPattern =
                 Just . simpleFileDetails <$> downloadHttp href ".pdf"
               _ -> error "Not found"
           _ -> error "Not found"
+    , available = const True
     }

@@ -21,8 +21,9 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, catMaybes, listToMaybe, maybeToList)
 import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
 import Data.Time (UTCTime (..), getCurrentTime)
 import qualified Data.Yaml as YAML
 import qualified Network.HTTP.Types as HTTP
@@ -121,8 +122,11 @@ app listingCache provider = do
     return ()
 
   Scotty.get "/" $ do
-    Scotty.headers >>= Scotty.liftIO . print
-    Scotty.redirect "/charts/api"
+    -- Scotty.headers >>= Scotty.liftIO . print
+    query <- Scotty.queryParams
+    Scotty.redirect $
+      "/charts/api?" <> LText.intercalate "&"
+        [ LText.fromStrict . decodeUtf8 $ HTTP.urlEncode True (encodeUtf8 name) <> "=" <> HTTP.urlEncode True (encodeUtf8 value) | (name, value) <- query ]
 
   Scotty.get "/static/style.css" styleCSS
   Scotty.get "/static/style.xsl" styleXSL
@@ -174,7 +178,11 @@ app listingCache provider = do
     page <- fromMaybe 0 <$> Scotty.queryParamMaybe "p"
     search <- maybe "" (":" <>) <$> Scotty.queryParamMaybe "q"
     query <- Scotty.queryParams
-    let cacheKey = dirname <> ":" <> Text.pack (show page) <> search
+    let hasChartfoxToken = case lookup "chartfoxToken" query of
+          Nothing -> False
+          Just "" -> False
+          _ -> True
+    let cacheKey = dirname <> ":" <> Text.pack (show page) <> search <> if hasChartfoxToken then ":c" else ""
     files <- Scotty.liftIO $
       cached listingCache cacheKey $ listFiles provider query dirname page
     Scotty.setHeader "Content-type" "text/xml"

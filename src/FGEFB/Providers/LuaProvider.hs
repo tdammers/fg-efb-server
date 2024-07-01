@@ -61,6 +61,7 @@ luaProvider
         let pathText = unpackParam pathEnc
         paginate page <$> runLua "listFiles" pathText (Lua.peekList peekFileInfo)
 
+    , available = const True
     }
   where
     runLua :: Lua.Name -> Text -> Lua.Peeker Lua.Exception a -> IO a

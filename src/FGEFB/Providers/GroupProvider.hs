@@ -23,11 +23,11 @@ groupProvider mlabel providers = Provider
             Nothing -> return Nothing
             Just provider -> getPdf provider query subpath
   , listFiles = \query path page -> do
-      print path
-      print query
+      -- print path
+      -- print query
       case Text.splitOn "/" path of
-        [] -> return (paginate page $ providerList)
-        [""] -> return (paginate page $ providerList)
+        [] -> return (paginate page $ providerList query)
+        [""] -> return (paginate page $ providerList query)
         providerID:subpathItems -> do
           let subpath = Text.intercalate "/" subpathItems
           case Map.lookup providerID providers of
@@ -41,6 +41,7 @@ groupProvider mlabel providers = Provider
                   | i <- infos
                   ]
                   (amendMetaSearchPath providerID meta)
+  , available = const True
   }
   where
     amendMetaSearchPath providerID meta =
@@ -49,7 +50,7 @@ groupProvider mlabel providers = Provider
             path <- fileListMetaSearchPath meta
             return $ providerID <> "/" <> path
         }
-    providerList =
+    providerList query =
       [ defFileInfo
           { fileName = fromMaybe providerID $ label provider
           , fileType = Directory
@@ -57,4 +58,5 @@ groupProvider mlabel providers = Provider
           }
       | (providerID, provider)
       <- Map.toAscList providers
+      , available provider query
       ]

@@ -3,33 +3,33 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
 
 module FGEFB.Providers.ChartfoxProvider
 where
 
-import Data.List
-import Data.Maybe (fromMaybe)
+import Control.Applicative
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe
+import Data.Aeson ( (.:), (.=), (.:?) )
+import qualified Data.Aeson as JSON
+import qualified Data.ByteString.Lazy as LBS
+import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Network.HTTP.Types (urlDecode)
-import Control.Applicative
-import qualified Data.Aeson as JSON
-import Data.Aeson ( (.:), (.=), (.:?) )
-import qualified Data.ByteString.Lazy as LBS
+-- import Debug.Trace
 
 import qualified FGEFB.Chartfox as Chartfox
 
+import FGEFB.HTTP (downloadHttp)
 import FGEFB.Provider
 import FGEFB.Util (tshow)
-import FGEFB.HTTP (downloadHttp)
 
 getBearerToken :: [(Text, Text)] -> IO Text
 getBearerToken query =
@@ -37,8 +37,8 @@ getBearerToken query =
     lookup "chartfoxToken" query
 
 getSearchQuery :: [(Text, Text)] -> Maybe Text
-getSearchQuery query =
-  lookup "q" query
+getSearchQuery =
+  lookup "q"
 
 topLevelCodes :: Map Text Text
 topLevelCodes = Map.fromList
@@ -721,7 +721,7 @@ downloadChart bearerToken chartID = do
   infoEither <- Chartfox.apiCall bearerToken ("/v2/charts/" <> chartID) []
   case infoEither of
     Right info -> runMaybeT $ do
-      path <- case (filter isPdf $ chartDetailsFiles info) of
+      path <- case filter isPdf $ chartDetailsFiles info of
         ChartFileInfo { chartFileURL = url }:_ -> do
           liftIO $ print url
           liftIO $ downloadHttp url ".pdf"
@@ -745,25 +745,25 @@ downloadChart bearerToken chartID = do
 
 chartfoxProvider :: Maybe Text -> Provider
 chartfoxProvider labelMay = Provider
-  { label = labelMay <|> (Just "ChartFox")
+  { label = labelMay <|> Just "ChartFox"
   , listFiles = \query path page -> do
       bearerToken <- getBearerToken query
       let pathParts = Text.splitOn "/" path
-      print bearerToken
-      print pathParts
+      -- print bearerToken
+      -- print pathParts
       case pathParts of
         [] ->
           listTopLevel page
         [""] ->
           listTopLevel page
         ["search"] -> do
-          print "Search"
+          -- print "Search"
           case getSearchQuery query of
             Nothing -> do
-              print "No search query"
+              -- print "No search query"
               return $ setFileListSearchPath "search" nullFileList
             Just searchQuery -> do
-              print searchQuery
+              -- print searchQuery
               listSearch bearerToken searchQuery page
         [item] | Text.length item < 4 ->
           listAirports bearerToken item page
@@ -777,7 +777,7 @@ chartfoxProvider labelMay = Provider
   , getPdf = \query path -> do
       bearerToken <- getBearerToken query
       let pathParts = Text.splitOn "/" path
-      print pathParts
+      -- print pathParts
       case pathParts of
         [_icao, _type, chartID] ->
           downloadChart bearerToken chartID
@@ -785,4 +785,10 @@ chartfoxProvider labelMay = Provider
           downloadChart bearerToken chartID
         _ ->
           error "Invalid chart"
+  , available = \query ->
+      -- traceShow query $
+      case lookup "chartfoxToken" query of
+        Nothing -> False
+        Just "" -> False
+        _ -> True
   }

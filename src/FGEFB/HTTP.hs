@@ -56,28 +56,29 @@ getCacheFilename url extension = do
 
 withCache :: Text -> FilePath -> (Text -> FilePath -> IO ()) -> IO FilePath
 withCache url extension download = do
-  printf "Requested: %s\n" url
+  -- printf "Requested: %s\n" url
   filename <- getCacheFilename url extension
   doesFileExist filename >>= \case
     False -> do
-      printf "%s not found, downloading from %s\n" filename url
+      -- printf "%s not found, downloading from %s\n" filename url
       download url filename
     _ -> do
-      printf "%s found\n" filename
+      -- printf "%s found\n" filename
+      return ()
   return filename
 
 withCacheImmediate :: Binary a => Text -> (Text -> IO a) -> IO a
 withCacheImmediate url download = do
-  printf "Requested: %s\n" url
+  -- printf "Requested: %s\n" url
   filename <- getCacheFilename url ".raw"
   doesFileExist filename >>= \case
     False -> do
-      printf "%s not found, downloading from %s\n" filename url
+      -- printf "%s not found, downloading from %s\n" filename url
       val <- download url
       Binary.encodeFile filename val
       return val
     _ -> do
-      printf "%s found\n" filename
+      -- printf "%s found\n" filename
       Binary.decodeFile filename
 
 downloadHttp :: Text -> FilePath -> IO FilePath
@@ -152,7 +153,7 @@ http method urlInitial maybeBody extraHeaders = do
             setRequestBodyMaybe maybeBody .
             HTTP.setRequestMethod (requestMethodBS method) <$>
               HTTP.parseRequest (Text.unpack url)
-      print $ HTTP.requestHeaders rq
+      -- print $ HTTP.requestHeaders rq
       case HTTP.requestBody rq of
         HTTP.RequestBodyLBS lbs -> LBS.putStr lbs >> putStrLn ""
         HTTP.RequestBodyBS bs -> BS.putStr bs >> putStrLn ""
@@ -171,10 +172,10 @@ http method urlInitial maybeBody extraHeaders = do
           Nothing ->
             throwHTTPError "Missing location header"
           Just location -> do
-            printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
+            -- printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
             urlLeft <- either throwHTTPError return (parseURLText url)
             urlRight <- either throwHTTPError return (parseURLText (decodeUtf8 location))
-            printf "%s -> %s\n" (show urlLeft) (show urlRight)
+            -- printf "%s -> %s\n" (show urlLeft) (show urlRight)
             let url' = renderURLText $ urlLeft <> urlRight
             if url' == url then
               throwHTTPError $ "Infinite redirection (location): " <> show url
@@ -204,7 +205,7 @@ http method urlInitial maybeBody extraHeaders = do
             document
           case metaRefresh of
             url':_ -> do
-              printf "Redirecting due to meta refresh: %s\n" url'
+              -- printf "Redirecting due to meta refresh: %s\n" url'
               if url' == url then
                 throwHTTPError $ "Infinite redirection (meta refresh): " <> show url
               else

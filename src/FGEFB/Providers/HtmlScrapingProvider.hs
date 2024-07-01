@@ -239,6 +239,7 @@ htmlScrapingProvider context mlabel rootUrlTemplate landingPathTemplate folderSp
         let path = Text.pack . urlDecode . Text.unpack $ pathEnc
         paginate page <$> go path
         
+    , available = const True
     }
     where
       vars = unpackVars (contextDefs context)

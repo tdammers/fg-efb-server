@@ -54,6 +54,7 @@ data Provider =
     { label :: Maybe Text
     , listFiles :: [(Text, Text)] -> Text -> Int -> IO FileList
     , getPdf :: [(Text, Text)] -> Text -> IO (Maybe FileDetails)
+    , available :: [(Text, Text)] -> Bool
     }
 
 data FileList =
