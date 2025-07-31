@@ -148,7 +148,7 @@ renderElement e =
   in renderDocumentWith
         def
           { XML.rsXMLDeclaration = False
-          , XML.rsPretty = True
+          -- , XML.rsPretty = True
           }
         doc
 
@@ -163,7 +163,7 @@ renderDocument :: XML.Document -> Text
 renderDocument = renderDocumentWith
   def
     { XML.rsXMLDeclaration = True
-    , XML.rsPretty = True
+    -- , XML.rsPretty = True
     }
 
 getAttr :: XML.Element -> XML.Name -> Maybe Text

@@ -3,7 +3,7 @@ packages: .
 package fg-efb-server
     -- ghc-options: -Wall -Werror
     -- for development purposes, consider this in cabal.project.local:
-    ghc-options: -Wno-error -Wno-unused-imports -Wno-unused-local-binds -Wno-unused-do-bind
+    ghc-options: -Wno-unused-imports -Wno-unused-local-binds -Wno-unused-do-bind
 
 allow-newer: xml-conduit-selectors:text
            , xml-conduit-selectors:megaparsec
@@ -22,3 +22,4 @@ allow-newer: xml-conduit-selectors:text
            , hslua-aeson:bytestring
            , hslua-aeson:text
            , hslua-aeson:aeson
+           , hashable:base
