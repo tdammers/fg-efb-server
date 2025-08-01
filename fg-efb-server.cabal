@@ -4,7 +4,7 @@ cabal-version: >=1.10
 -- http://haskell.org/cabal/users-guide/
 
 name: fg-efb-server
-version: 0.2.0.0
+version: 0.3.0.0
 synopsis: Companion server for FlightGear Electronic Flight Bag
 description: Expose PDF charts as JPG images for the FlightGear Electronic Flight Bag
 -- bug-reports:
