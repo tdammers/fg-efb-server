@@ -7,19 +7,20 @@ package fg-efb-server
 
 allow-newer: xml-conduit-selectors:text
            , xml-conduit-selectors:megaparsec
-           , hslua:bytestring
-           , hslua:text
-           , hslua-packaging:bytestring
-           , hslua-packaging:text
-           , hslua-objectorientation:bytestring
-           , hslua-objectorientation:text
-           , hslua-marshalling:bytestring
-           , hslua-marshalling:text
-           , hslua-core:bytestring
-           , hslua-core:text
-           , hslua-classes:bytestring
-           , hslua-classes:text
-           , hslua-aeson:bytestring
-           , hslua-aeson:text
-           , hslua-aeson:aeson
-           , hashable:base
+--            , hslua:bytestring
+--            , hslua:text
+--            , hslua-packaging:bytestring
+--            , hslua-packaging:text
+--            , hslua-objectorientation:bytestring
+--            , hslua-objectorientation:text
+--            , hslua-marshalling:bytestring
+--            , hslua-marshalling:text
+--            , hslua-core:bytestring
+--            , hslua-core:text
+--            , hslua-classes:bytestring
+--            , hslua-classes:text
+--            , hslua-aeson:bytestring
+--            , hslua-aeson:text
+--            , hslua-aeson:aeson
+--            , hashable:base
+--            , hashable:tls

@@ -75,7 +75,7 @@ luaProvider
         Lua.preloadModule moduleURL
         Lua.pushMap Lua.pushText Lua.pushValue (contextDefs context)
         Lua.setglobal "context"
-        luaThrowStatus $ Lua.dofileTrace scriptFilename
+        luaThrowStatus $ Lua.dofileTrace (Just scriptFilename)
         void $ Lua.getglobal funcname
         Lua.push pathText
         luaThrowStatus $ Lua.pcallTrace 1 1

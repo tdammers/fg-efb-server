@@ -44,6 +44,10 @@ moduleHTTP =
     ]
     -- operations
     []
+    -- type intializers
+    []
+    -- type docs
+    []
 
 joinURLs :: LuaError e => ByteString -> ByteString -> LuaE e ByteString
 joinURLs a b = either fail return $ do
@@ -74,6 +78,10 @@ moduleURL =
         =#> functionResult push "string" "url-encoded string"
     ]
     -- operations
+    []
+    -- type intializers
+    []
+    -- type docs
     []
 
 pushProtocol :: Protocol -> LuaE e ()

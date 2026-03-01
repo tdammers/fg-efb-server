@@ -64,6 +64,10 @@ moduleXML =
     ]
     -- operations
     []
+    -- type intializers
+    []
+    -- type docs
+    []
 
 renderName :: XML.Name -> Text.Text
 renderName n =

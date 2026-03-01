@@ -3,6 +3,7 @@
 module FGEFB.HTTP
 where
 
+import Data.Function ( (&) )
 import Control.Exception (Exception, throwIO)
 import qualified Crypto.Hash as Crypto
 import Crypto.Hash.Algorithms (SHA512)
@@ -81,10 +82,26 @@ withCacheImmediate url download = do
       -- printf "%s found\n" filename
       Binary.decodeFile filename
 
+defHeaders :: [(HTTP.HeaderName, BS.ByteString)]
+defHeaders =
+  [ ( "User-Agent"
+    , "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
+    )
+  ]
+
+applyDefHeaders :: HTTP.Request -> HTTP.Request
+applyDefHeaders rq =
+  foldr applyHeader rq defHeaders
+  where
+    applyHeader :: (HTTP.HeaderName, BS.ByteString) -> HTTP.Request -> HTTP.Request
+    applyHeader (name, hdr) = HTTP.setRequestHeader name [hdr]
+
+
 downloadHttp :: Text -> FilePath -> IO FilePath
 downloadHttp url extension = do
   withCache url extension $ \url' filename -> do
-    rq <- HTTP.parseRequest (Text.unpack url')
+    rq <- applyDefHeaders <$> HTTP.parseRequest (Text.unpack url')
+    print rq
     printf "HTTP %s -> %s\n" url filename
     rp <- HTTP.httpBS rq
     BS.writeFile filename (HTTP.getResponseBody rp)
@@ -94,7 +111,7 @@ httpCachedGET url = do
   withCacheImmediate url httpGET
 
 httpGET :: Text -> IO (Text, LBS.ByteString)
-httpGET url = http GET url Nothing []
+httpGET url = http GET url Nothing defHeaders
 
 httpGETWithHeaders :: Text -> [(HTTP.HeaderName, BS.ByteString)] -> IO (Text, LBS.ByteString)
 httpGETWithHeaders url headers = http GET url Nothing headers
