@@ -54,15 +54,17 @@ formatUrl Nothing pattern =
 
 getEntries :: Maybe Int -> Text -> IO [Entry]
 getEntries mparentID pattern = do
+  putStrLn $ "getEntries " <> maybe "/" show mparentID
   getEntriesFrom (Text.unpack $ formatUrl mparentID pattern)
 
 getEntriesFrom :: String -> IO [Entry]
 getEntriesFrom url = do
+  putStrLn url
   rq <- HTTP.parseRequest url
   HTTP.getResponseBody <$> httpJSON rq
 
-navaidJsonProvider :: Maybe Text -> Text -> Provider
-navaidJsonProvider mlabel urlPattern =
+navaidJsonProvider :: Maybe Text -> Text -> Text -> Provider
+navaidJsonProvider mlabel urlPattern baseUrl =
   Provider
     { label = mlabel
     , listFiles = \_ dirname page -> do
@@ -79,7 +81,8 @@ navaidJsonProvider mlabel urlPattern =
             entries <- getEntries (Just parentID) urlPattern
             case filter (\e -> entry_id e == childID) entries of
               [Entry { entry_href = Just href }] -> do
-                Just . simpleFileDetails <$> downloadHttp href ".pdf"
+                let url = baseUrl <> "/" <> href
+                Just . simpleFileDetails <$> downloadHttp url ".pdf"
               _ -> error "Not found"
           _ -> error "Not found"
     , available = const True

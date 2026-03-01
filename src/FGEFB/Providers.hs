@@ -30,8 +30,10 @@ instance JSON.FromJSON ProviderFactory where
         case tag :: Text of
           "file" ->
             ProviderFactory . const . return . localFileProvider label <$> obj .: "path"
-          "navaid" ->
-            ProviderFactory . const . return . navaidJsonProvider label <$> obj .: "template"
+          "navaid" -> do
+            template <- obj .: "template"
+            baseUrl <- obj .: "baseUrl"
+            return . ProviderFactory . const . return $ navaidJsonProvider label template baseUrl
           "lua" -> do
             scriptFilename <- obj .: "script"
             return . ProviderFactory $ \context ->
