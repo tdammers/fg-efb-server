@@ -42,6 +42,9 @@ import Text.Printf (printf)
 import qualified Text.XML as XML
 import Web.Scotty (ScottyM, scotty)
 import qualified Web.Scotty as Scotty
+import qualified Network.TLS as TLS
+import qualified Network.HTTP.Client.TLS as TLS
+import qualified Network.Connection as TLS
 
 import FGEFB.Airac (Airac, findCurrentAiracOn, airacDetails)
 import qualified FGEFB.Airac as Airac
@@ -401,6 +404,19 @@ defProviders = [
 
 runServer :: IO ()
 runServer = do
+  let myManagerSettings =
+        TLS.mkManagerSettings
+          TLS.TLSSettingsSimple
+            { TLS.settingDisableCertificateValidation = False
+            , TLS.settingDisableSession = False
+            , TLS.settingUseServerName = False
+            , TLS.settingClientSupported =
+                TLS.defaultSupported
+                  { TLS.supportedExtendedMainSecret = TLS.AllowEMS
+                  }
+            }
+          Nothing
+  TLS.setGlobalManager =<< TLS.newTlsManagerWith myManagerSettings
   defs' <- loadFirstConfigFileOrElse [] "defs.yaml"
   airacs <- loadFirstConfigFileOrElse [] "airac.yaml" :: IO [Airac]
   today <- utctDay <$> getCurrentTime

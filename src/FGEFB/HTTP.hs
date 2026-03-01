@@ -16,7 +16,6 @@ import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import Network.Connection (TLSSettings (..))
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import qualified Network.HTTP.Types as HTTP
