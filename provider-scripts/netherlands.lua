@@ -6,10 +6,14 @@ require 'common'
 require 'navigator'
 
 local rootURL = "https://eaip.lvnl.nl/"
-local startURL = "https://www.lvnl.nl/informatie-voor-luchtvarenden/publicaties-voor-luchtvarenden"
+local startURL = "https://eaip.lvnl.nl/web/eaip/default.html"
 
 function getPDF(path)
     return HTTP.download(URL.join(rootURL, path), ".pdf")
+end
+
+function fixIndexUrl(url)
+    return string.gsub(url, 'index.html', '/index.html')
 end
 
 function listFiles(path)
@@ -17,38 +21,40 @@ function listFiles(path)
 
     if path == "" then
         navigator:go(startURL)
-        -- navigator:follow("a[title=eAIP]", "href")
-        navigator:follow("a[class~=btn--primary]", "href")
+        navigator:follow("table.HISTORY>tbody a", "href", fixIndexUrl)
         navigator:follow("frame", "src")
-        navigator:follow("frame[name=eAISMenuFrameset]", "src")
-        navigator:follow("frame[name=eAISMenuContent]", "src")
+        navigator:follow("frame[name=eAISNavigation]", "src")
 
-        local qresult = navigator:query("div.level[id^='AD-2.'][id$='details']")
         local result = {}
-        for k, v in ipairs(qresult) do
-            local link = v:query("a[id$='2.24']")[1].node
-            print(link)
+        local known = {}
+        local links = navigator:query("div.level[id^='AD 2 '][id$='en-GBdetails'] a[id*='AD 2.24']")
+        for k, node in ipairs(links) do
+            local link = node.node
             local name = link.textContent
             name = string.gsub(name, utf8.char(160), ' ')
-            name = string.gsub(name, '^AD 2.24 ', '')
-            name = string.gsub(name, '%s*CHARTS RELATED TO AN AERODROME$', '')
+            name = string.gsub(name, 'AD 2.24 ', '')
+            name = string.gsub(name, '%s*AERONAUTICAL CHARTS RELATED TO AN AERODROME', '')
             local href = URL.join(navigator.currentURL, link:attr('href'))
             local path = intercalate(URL.parse(href).path, '/')
+            if known[href] then
+                -- skip
+            else
+                table.insert(result,
+                    { type = "dir"
+                    ; name = name
+                    ; path = path
+                    }
+                )
+                known[href] = true
+            end
 
-            table.insert(result,
-                { type = "dir"
-                ; name = name
-                ; path = path
-                }
-            )
         end
         return result
     else
         navigator:go('/' .. path)
-        local qresult = navigator:query("div[id$='2.24']>table>tbody>tr")
+        local qresult = navigator:query("tr[id^='AD 2 ']")
         local result = {}
         for k, v in ipairs(qresult) do
-            print(v)
             local link = v:query("a[href]")[1].node
             local labelTD = v:query("td")[1].node
             local linkURL = URL.join(navigator.currentURL, link:attr('href'))
@@ -61,7 +67,6 @@ function listFiles(path)
             label = string.gsub(label, 'Standard arrival', 'STAR')
             label = string.gsub(label, 'Aerodrome obstacle chart', 'AOC')
             label = string.gsub(label, 'Aircraft parking / docking chart', 'APDC')
-            print(labelTD)
             table.insert(result,
                 { type = "pdf"
                 ; name = label

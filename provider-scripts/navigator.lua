@@ -20,7 +20,7 @@ function HTTPNavigator:fetch ()
     return self.doc, self.currentURL
 end
 
-function HTTPNavigator:follow (query, attr)
+function HTTPNavigator:follow (query, attr, transform)
     local doc = self:fetch()
     local result = doc:query(query)
     if #result == 0 then
@@ -29,6 +29,9 @@ function HTTPNavigator:follow (query, attr)
         self.doc = nil
     else
         local nextURL = result[1].node:attr(attr)
+        if (transform ~= nil) then
+            nextURL = transform(nextURL)
+        end
         self:go(nextURL)
     end
     return self
