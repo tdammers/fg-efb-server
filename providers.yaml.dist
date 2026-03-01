@@ -1,3 +1,9 @@
+# Enable the following if you have a VATSIM account
+# and want to use ChartFox charts
+# 0000.ChartFox:
+#   label: "ChartFox"
+#   type: chartfox
+
 1000.NorthAmerica:
   label: "North America"
   type: group
@@ -7,14 +13,15 @@
       type: lua
       script: 'provider-scripts/usa.lua'
 
-    C:
-      label: "Cxxx: Canada"
-      type: html
-      url: 'http://www.uvairlines.com'
-      start: '/admin/resources/charts-canada.htm'
-      documents:
-        - select: 'table a'
-      folders: []
+    # UVAirlines no longer online.
+    # C:
+    #   label: "Cxxx: Canada"
+    #   type: html
+    #   url: 'http://www.uvairlines.com'
+    #   start: '/admin/resources/charts-canada.htm'
+    #   documents:
+    #     - select: 'table a'
+    #   folders: []
 
 2000.Europe:
   label: "Europe"
@@ -43,6 +50,7 @@
       label: "EKxx: Denmark NavAID"
       type: navaid
       template: 'https://aim.naviair.dk/umbraco/api/naviairapi/getnodesforparent?parentId={parentid}'
+      baseUrl: 'https://aim.naviair.dk/'
     EH:
       label: "EHxx: Netherlands eAIP"
       type: lua
@@ -77,31 +85,8 @@
             attrib: 'href'
     EN:
       label: "ENxx: Norway Avinor"
-      type: html
-      url: 'https://ais.avinor.no'
-      start: '/no/AIP/'
-      folders:
-        - select: '.history_pane a'
-          auto-follow: true
-        - select: 'frame[name=eAISNavigationBase]'
-          href: '@src'
-          auto-follow: true
-        - select: 'frame[name=eAISCommands][src="commands-no-NO.html"]'
-          href: '@src'
-          auto-follow: true
-        - select: 'div.menu-items p.command a[href="index-en-GB.html"]'
-          auto-follow: true
-        - select: 'frame[name=eAISNavigation][src^="eAIP/EN-menu"]'
-          href: '@src'
-          auto-follow: true
-        - select: '#ADdetails #AD-2details>div.Hx>a[href!="#"]'
-          label: '>:nth-child(2),>:nth-child(3)'
-      documents:
-        - select: 'div[id$="2.24"] tr'
-          label: 'p,a'
-          href:
-            child: 'a[href$=".pdf"]'
-            attrib: 'href'
+      type: lua
+      script: 'provider-scripts/norway.lua'
     ES:
       label: "ESxx: Sweden AROWeb"
       type: html
