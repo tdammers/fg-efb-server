@@ -6,7 +6,7 @@ require 'common'
 require 'navigator'
 
 local rootURL = "https://eaip.lvnl.nl/"
-local startURL = "https://eaip.lvnl.nl/web/eaip/default.html"
+local startURL = "https://eaip.lvnl.nl/"
 
 function getPDF(path)
     return HTTP.download(URL.join(rootURL, path), ".pdf")

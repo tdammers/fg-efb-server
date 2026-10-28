@@ -80,7 +80,7 @@ executable fg-efb-server
                , temporary >=1.3 && <1.4
                , text >=2.1.4 && <2.2
                , time >=1.12 && <1.16
-               , tls >=2.2.2 && <2.3
+               , tls >=2.2.2 && <2.5
                , transformers >=0.6.3.0 && <0.7
                , unordered-containers >=0.2.21 && <0.3
                , vector >=0.13.2.0 && <0.14
@@ -91,3 +91,4 @@ executable fg-efb-server
                , yaml >=0.11.11.2 && <0.12
   hs-source-dirs: src
   default-language: Haskell2010
+  ghc-options: -threaded

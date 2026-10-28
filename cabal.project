@@ -7,6 +7,10 @@ package fg-efb-server
 
 allow-newer: xml-conduit-selectors:text
            , xml-conduit-selectors:megaparsec
+           , serialise:base
+           , primitive:base
+           , cborg:base
+           , http-api-data:base
 --            , hslua:bytestring
 --            , hslua:text
 --            , hslua-packaging:bytestring
