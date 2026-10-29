@@ -8,6 +8,8 @@ require 'navigator'
 local rootURL = "https://eaip.lvnl.nl/"
 local startURL = "https://eaip.lvnl.nl/"
 
+searchPath = "search"
+
 function getPDF(path)
     return HTTP.download(URL.join(rootURL, path), ".pdf")
 end
@@ -16,40 +18,53 @@ function fixIndexUrl(url)
     return string.gsub(url, 'index.html', '/index.html')
 end
 
-function listFiles(path)
-    local navigator = HTTPNavigator:new(rootURL)
+function listIndex(navigator, isMatch)
+    navigator:go(startURL)
+    navigator:follow("table.HISTORY>tbody a", "href", fixIndexUrl)
+    navigator:follow("frame", "src")
+    navigator:follow("frame[name=eAISNavigation]", "src")
 
-    if path == "" then
-        navigator:go(startURL)
-        navigator:follow("table.HISTORY>tbody a", "href", fixIndexUrl)
-        navigator:follow("frame", "src")
-        navigator:follow("frame[name=eAISNavigation]", "src")
-
-        local result = {}
-        local known = {}
-        local links = navigator:query("div.level[id^='AD 2 '][id$='en-GBdetails'] a[id*='AD 2.24']")
-        for k, node in ipairs(links) do
-            local link = node.node
-            local name = link.textContent
-            name = string.gsub(name, utf8.char(160), ' ')
-            name = string.gsub(name, 'AD 2.24 ', '')
-            name = string.gsub(name, '%s*AERONAUTICAL CHARTS RELATED TO AN AERODROME', '')
-            local href = URL.join(navigator.currentURL, link:attr('href'))
-            local path = intercalate(URL.parse(href).path, '/')
-            if known[href] then
-                -- skip
-            else
+    local result = {}
+    local known = {}
+    local links = navigator:query("div.level[id^='AD 2 '][id$='en-GBdetails'] a[id*='AD 2.24']")
+    for k, node in ipairs(links) do
+        local link = node.node
+        local name = link.textContent
+        name = string.gsub(name, utf8.char(160), ' ')
+        name = string.gsub(name, 'AD 2.24 ', '')
+        name = string.gsub(name, '%s*AERONAUTICAL CHARTS RELATED TO AN AERODROME', '')
+        local href = URL.join(navigator.currentURL, link:attr('href'))
+        local path = intercalate(URL.parse(href).path, '/')
+        if known[href] then
+            -- skip
+        else
+            known[href] = true
+            if isMatch == nil or isMatch(name) then
                 table.insert(result,
                     { type = "dir"
                     ; name = name
                     ; path = path
                     }
                 )
-                known[href] = true
             end
-
         end
-        return result
+
+    end
+    return result
+end
+
+function listFiles(path, query)
+    local navigator = HTTPNavigator:new(rootURL)
+
+    if path == "" then
+        return listIndex(navigator)
+    elseif path == "search" then
+        local search = query['q']
+        local isMatch =
+            function (name)
+                return (string.match(name, search) ~= fail)
+            end
+        return listIndex(navigator, isMatch)
     else
         navigator:go('/' .. path)
         local qresult = navigator:query("tr[id^='AD 2 ']")
