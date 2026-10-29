@@ -8,11 +8,13 @@ require 'navigator'
 local rootURL = 'https://skyvector.com'
 local startURL = 'https://skyvector.com/airports/United+States'
 
+searchPath = "search"
+
 function getPDF(path)
     return HTTP.download(URL.join(rootURL, path), ".pdf")
 end
 
-function listFiles(path)
+function listFiles(path, query)
     local navigator = HTTPNavigator:new(startURL)
 
     if path == "" then
@@ -33,10 +35,34 @@ function listFiles(path)
             )
         end
         return result
+    elseif path == "search" then
+        local search = query['q']
+        navigator:go('/search/site/' .. search)
+        local qresult = navigator:query('li.search-result>h3.title>a')
+        dumpTable(qresult)
+        local result = {}
+        for k, v in ipairs(qresult) do
+            local link = v.node
+            local href = URL.join(navigator.currentURL, link:attr('href'))
+            local path = intercalate(URL.parse(href).path, '/')
+
+            local name = link.textContent
+
+            print(href)
+            if string.match(href, '/airport/') ~= fail then
+                table.insert(result,
+                    { type = "dir"
+                    ; name = name
+                    ; path = path
+                    }
+                )
+            end
+        end
+        return result
     elseif string.match(path, '^airports/') ~= fail then
         navigator:go('/' .. path)
         local qresult = navigator:query('td.views-field-title>a')
-        dumpTable(qresult)
+        -- dumpTable(qresult)
         local result = {}
         for k, v in ipairs(qresult) do
             local link = v.node
@@ -109,5 +135,7 @@ function listFiles(path)
         end
 
         return result
+    else
+        return {}
     end
 end

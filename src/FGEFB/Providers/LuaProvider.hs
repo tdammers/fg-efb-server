@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module FGEFB.Providers.LuaProvider
 where
@@ -56,16 +57,39 @@ luaProvider
     { label = mlabel
     , getPdf = \_ pathEnc -> do
         let pathText = unpackParam pathEnc
-        fmap simpleFileDetails <$> runLua "getPDF" pathText (Lua.choice [fmap Just . Lua.peekString, fmap (const Nothing) . Lua.peekNil])
-    , listFiles = \_ pathEnc page -> do
+        fmap simpleFileDetails <$>
+                runLua
+                  "getPDF" [Lua.push pathText]
+                  (Lua.choice [fmap Just . Lua.peekString, fmap (const Nothing) . Lua.peekNil])
+    , listFiles = \query pathEnc page -> do
         let pathText = unpackParam pathEnc
-        paginate page <$> runLua "listFiles" pathText (Lua.peekList peekFileInfo)
+        items <- paginate page <$>
+                    runLua
+                      "listFiles" [Lua.push pathText, Lua.push $ Map.fromList query]
+                      (Lua.peekList peekFileInfo)
+        case pathText of
+          "" -> amendSearchPath items
+          "/" -> amendSearchPath items
+          _ -> return items
 
     , available = const True
     }
   where
-    runLua :: Lua.Name -> Text -> Lua.Peeker Lua.Exception a -> IO a
-    runLua funcname pathText peeker = do
+    amendSearchPath items@FileList { fileListMeta = meta@FileListMeta {..}} = do
+      searchPathMaybe <- getLua "searchPath"
+                      (Lua.choice
+                        [ fmap Just .  Lua.peekText
+                        , fmap (const Nothing) . Lua.peekNil
+                        ])
+      return $ 
+          items
+            { fileListMeta = meta
+              { fileListMetaSearchPath = searchPathMaybe
+              }
+            }
+
+    execLua :: Lua.LuaE Lua.Exception () -> Lua.Peeker Lua.Exception a -> IO a
+    execLua inner peeker = do
       luaOutput <- Lua.runEither $ do
         Lua.openlibs
         void $ Lua.dostring "package.path = './provider-scripts/?.lua'"
@@ -76,11 +100,21 @@ luaProvider
         Lua.pushMap Lua.pushText Lua.pushValue (contextDefs context)
         Lua.setglobal "context"
         luaThrowStatus $ Lua.dofileTrace (Just scriptFilename)
-        void $ Lua.getglobal funcname
-        Lua.push pathText
-        luaThrowStatus $ Lua.pcallTrace 1 1
+        inner
         Lua.force =<< Lua.runPeeker peeker Lua.top
       either throwIO return luaOutput
+
+    getLua :: Lua.Name -> Lua.Peeker Lua.Exception a -> IO a
+    getLua varname =
+      execLua $ do
+        void $ Lua.getglobal varname
+
+    runLua :: Lua.Name -> [Lua.LuaE Lua.Exception ()] -> Lua.Peeker Lua.Exception a -> IO a
+    runLua funcname args =
+      execLua $ do
+        void $ Lua.getglobal funcname
+        sequence_ args
+        luaThrowStatus $ Lua.pcallTrace (fromIntegral $ length args) 1
 
     unpackParam :: Text -> Text
     unpackParam = decodeUtf8 . urlDecode True . encodeUtf8

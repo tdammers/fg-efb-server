@@ -26,8 +26,8 @@ groupProvider mlabel providers = Provider
       -- print path
       -- print query
       case Text.splitOn "/" path of
-        [] -> return (paginate page $ providerList query)
-        [""] -> return (paginate page $ providerList query)
+        [] -> getTopLevelList page query
+        [""] -> getTopLevelList page query
         providerID:subpathItems -> do
           let subpath = Text.intercalate "/" subpathItems
           case Map.lookup providerID providers of
@@ -44,6 +44,9 @@ groupProvider mlabel providers = Provider
   , available = const True
   }
   where
+    getTopLevelList page query =
+      return (paginate page $ providerList query)
+
     amendMetaSearchPath providerID meta =
       meta
         { fileListMetaSearchPath = do

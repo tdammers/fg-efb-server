@@ -32,6 +32,15 @@
 </xsl:template>
 
 <xsl:template match="/listing">
+    <xsl:for-each select="meta/searchPath">
+        <form class="search" method="GET">
+            <xsl:attribute name="action">
+                <xsl:value-of select="."/>
+            </xsl:attribute>
+            <input type="text" name="q"/>
+            <button type="submit">Search</button>
+        </form>
+    </xsl:for-each>
     <ul class="listing">
     <xsl:for-each select="directory"> 
         <li class="directory">
