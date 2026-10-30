@@ -1,10 +1,21 @@
 local XML = require 'xml'
+local JSON = require 'json'
 local HTTP = require 'http'
 local URL = require 'url'
 
 function fetchHTML(url)
     body, finalURL = HTTP.get(url)
     return XML.parseHTML(body), finalURL
+end
+
+function fetchJSON(url)
+    body, finalURL = HTTP.get(url)
+    return JSON.parseJSON(body), finalURL
+end
+
+function fetchRAW(url)
+    body, finalURL = HTTP.get(url)
+    return body, finalURL
 end
 
 function intercalate(strings, sep)

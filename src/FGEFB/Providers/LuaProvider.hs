@@ -23,6 +23,7 @@ import qualified HsLua as Lua
 import FGEFB.Provider
 import FGEFB.Lua.XML
 import FGEFB.Lua.HTTP
+import FGEFB.Lua.JSON
 
 luaThrowStatus :: Lua.LuaError e => Lua.LuaE e Lua.Status -> Lua.LuaE e ()
 luaThrowStatus action = do
@@ -97,6 +98,7 @@ luaProvider
         Lua.preloadModule moduleXML
         Lua.preloadModule moduleHTTP
         Lua.preloadModule moduleURL
+        Lua.preloadModule moduleJSON
         Lua.pushMap Lua.pushText Lua.pushValue (contextDefs context)
         Lua.setglobal "context"
         luaThrowStatus $ Lua.dofileTrace (Just scriptFilename)

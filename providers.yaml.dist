@@ -88,21 +88,9 @@
       type: lua
       script: 'provider-scripts/norway.lua'
     ES:
-      label: "ESxx: Sweden AROWeb"
-      type: html
-      url: 'https://aro.lfv.se'
-      start: '/Editorial/View/IAIP?folderId=79'
-      folders:
-        - select: 'tr.sortableFolder-row'
-          label: 'a'
-          href:
-            child: 'a.sortableFolder--rightArrow'
-            attrib: 'href'
-        - select: 'a.folder-link'
-          label: 'span:not(.folder-arrow)'
-      documents:
-        - select: 'a.document-link[href^="/Editorial/View/"][href$="_en"]:has(span.document-prefix)'
-          label: 'span.document-prefix,span.document-name'
+      label: "ESxx: Sweden LFV"
+      type: lua
+      script: 'provider-scripts/sweden.lua'
     LE:
       label: "LExx: Spain Enaire"
       type: lua

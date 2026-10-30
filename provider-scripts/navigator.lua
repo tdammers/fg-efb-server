@@ -10,12 +10,27 @@ function HTTPNavigator:new (startURL)
     o = { currentURL = startURL; doc = nil }
     setmetatable(o, self)
     self.__index = self
+    self.format = nil
     return o
 end
 
-function HTTPNavigator:fetch ()
+function HTTPNavigator:fetch (format)
+    local fetcher = fetchHTML
+    if format == "json" then
+        fetcher = fetchJSON
+        self.format = "json"
+    elseif format == "raw" then
+        fetcher = fetchRAW
+        self.format = "raw"
+    elseif format == nil or format == "html" then
+        fetcher = fetchHTML
+        self.format = "html"
+    else
+        error("Invalid format: " .. tostring(format))
+    end
+
     if self.doc == nil then
-        self.doc, self.currentURL = fetchHTML(self.currentURL)
+        self.doc, self.currentURL = fetcher(self.currentURL)
     end
     return self.doc, self.currentURL
 end
@@ -47,5 +62,3 @@ function HTTPNavigator:query (query)
     local doc = self:fetch()
     return doc:query(query)
 end
-
-

@@ -43,6 +43,7 @@ executable fg-efb-server
     FGEFB.XmlUtil
     FGEFB.Lua.XML
     FGEFB.Lua.HTTP
+    FGEFB.Lua.JSON
     FGEFB.Lua.Util
   -- other-extensions:
   build-depends: base >=4.12 && <5
