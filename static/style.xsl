@@ -32,15 +32,17 @@
 </xsl:template>
 
 <xsl:template match="/listing">
-    <xsl:for-each select="meta/searchPath">
-        <form class="search" method="GET">
-            <xsl:attribute name="action">
-                <xsl:value-of select="."/>
-            </xsl:attribute>
-            <input type="text" name="q"/>
-            <button type="submit">Search</button>
-        </form>
-    </xsl:for-each>
+    <div class="search-container">
+        <xsl:for-each select="meta/searchPath">
+            <form class="search" method="GET">
+                <xsl:attribute name="action">
+                    <xsl:value-of select="."/>
+                </xsl:attribute>
+                <input type="text" name="q"/>
+                <button type="submit">Search</button>
+            </form>
+        </xsl:for-each>
+    </div>
     <ul class="listing">
     <xsl:for-each select="directory"> 
         <li class="directory">
@@ -69,35 +71,53 @@
         </li>
     </xsl:for-each>
     </ul>
-    <div class="pager">
-        <xsl:if test="meta/path != ''">
-            <a>
-                <xsl:attribute name="href">
-                    /charts/api/<xsl:value-of select="meta/path" />/..
-                </xsl:attribute>
-                Up
-            </a>
-        </xsl:if>
+    <div class="page-nav">
+        <div class="page-up">
+            <xsl:if test="meta/path != ''">
+                <a class="pager-up">
+                    <xsl:attribute name="href">
+                        /charts/api/<xsl:value-of select="meta/path" />/..
+                    </xsl:attribute>
+                    Up
+                </a>
+            </xsl:if>
+        </div>
+        <div class="pager">
 
-        <xsl:if test="meta/page &gt; 0">
-            <a>
-                <xsl:attribute name="href">
-                    ?p=<xsl:value-of select="meta/page - 1"/>
-                </xsl:attribute>
-                &lt;
-            </a>
-        </xsl:if>
-        <span>
-            <xsl:value-of select="meta/page + 1"/> / <xsl:value-of select="meta/numPages" />
-        </span>
-        <xsl:if test="meta/page &lt; meta/numPages - 1">
-            <a>
-                <xsl:attribute name="href">
-                    ?p=<xsl:value-of select="meta/page + 1"/>
-                </xsl:attribute>
-                &gt;
-            </a>
-        </xsl:if>
+            <xsl:choose>
+                <xsl:when test="meta/page &gt; 0">
+                    <a class="button previous">
+                        <xsl:attribute name="href">
+                            ?p=<xsl:value-of select="meta/page - 1"/>
+                        </xsl:attribute>
+                        &lt;
+                    </a>
+                </xsl:when>
+                <xsl:otherwise>
+                    <span class="button previous">
+                        &lt;
+                    </span>
+                </xsl:otherwise>
+            </xsl:choose>
+            <span>
+                <xsl:value-of select="meta/page + 1"/> / <xsl:value-of select="meta/numPages" />
+            </span>
+            <xsl:choose>
+                <xsl:when test="meta/page &lt; meta/numPages - 1">
+                    <a class="button next">
+                        <xsl:attribute name="href">
+                            ?p=<xsl:value-of select="meta/page + 1"/>
+                        </xsl:attribute>
+                        &gt;
+                    </a>
+                </xsl:when>
+                <xsl:otherwise>
+                    <span class="button next">
+                        &gt;
+                    </span>
+                </xsl:otherwise>
+            </xsl:choose>
+        </div>
     </div>
 </xsl:template>
 </xsl:stylesheet> 
