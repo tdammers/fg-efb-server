@@ -48,13 +48,13 @@ function listFiles(path)
             table.insert(result,
                 { type = "dir"
                 ; name = name
-                ; path = path
+                ; path = URL.encode(path)
                 }
             )
         end
         return result
     else
-        navigator:go(path)
+        navigator:go(URL.decode(path))
         local qresult = navigator:query('a.document-link')
         local result = {}
         for k, v in ipairs(qresult) do

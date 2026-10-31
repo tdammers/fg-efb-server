@@ -10,7 +10,7 @@ where
 import HsLua as Lua
 import qualified Data.ByteString.Lazy as LBS
 import Data.ByteString (ByteString)
-import Network.HTTP.Types (urlEncode)
+import Network.HTTP.Types (urlEncode, urlDecode)
 
 import FGEFB.Lua.Util
 import FGEFB.HTTP
@@ -76,6 +76,10 @@ moduleURL =
         ### liftPure (urlEncode True)
         <#> parameter peekByteString "string" "input" "raw string"
         =#> functionResult push "string" "url-encoded string"
+    , defun "decode"
+        ### liftPure (urlDecode True)
+        <#> parameter peekByteString "string" "input" "url-encoded string"
+        =#> functionResult push "string" "raw string"
     ]
     -- operations
     []

@@ -43,6 +43,7 @@
             </form>
         </xsl:for-each>
     </div>
+    <!-- <h4><xsl:value-of select="meta/path"/></h4> -->
     <ul class="listing">
     <xsl:for-each select="directory"> 
         <li class="directory">
