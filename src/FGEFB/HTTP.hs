@@ -1,21 +1,27 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE StandaloneDeriving #-}
+
 module FGEFB.HTTP
 where
 
-import Data.Function ( (&) )
-import Control.Exception (Exception, throwIO)
+import Control.Exception (Exception, ExceptionWithContext (..), throwIO, catchNoPropagate, rethrowIO, IOException)
 import qualified Crypto.Hash as Crypto
 import Crypto.Hash.Algorithms (SHA512)
-import Data.Binary (Binary)
+import qualified Data.Aeson as JSON
+import Data.Binary (Binary (..), put, get)
 import qualified Data.Binary as Binary
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Default (def)
-import Data.Maybe (mapMaybe)
+import Data.Function ( (&) )
+import Data.Maybe (mapMaybe, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Time (UTCTime, Day, DiffTime, diffTimeToPicoseconds, picosecondsToDiffTime)
+import GHC.Generics
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import qualified Network.HTTP.Types as HTTP
@@ -23,10 +29,10 @@ import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
 import System.FilePath ( (</>), (<.>) )
 import System.IO.Temp (getCanonicalTemporaryDirectory)
+import System.IO.Error (isDoesNotExistError)
 import qualified Text.HTML.DOM as HTML
 import Text.Printf (printf)
 import qualified Text.XML.Cursor as XML
-import qualified Data.Aeson as JSON
 
 import FGEFB.URL
 import FGEFB.XmlUtil (jqQuery)
@@ -41,6 +47,38 @@ throwHTTPError = throwIO . HttpError Nothing
 
 throwHTTPStatusError :: Int -> String -> IO a
 throwHTTPStatusError code msg = throwIO $ HttpError (Just code) msg
+
+deriving instance Generic HTTP.Cookie
+
+instance Binary UTCTime where
+instance Binary Day where
+
+instance Binary DiffTime where
+  put = put . diffTimeToPicoseconds
+  get = picosecondsToDiffTime <$> get
+
+instance Binary HTTP.Cookie where
+
+getCookieJarPath :: IO FilePath
+getCookieJarPath = do
+  cacheDir <- getCacheDir
+  return $ cacheDir </> "cookies"
+
+loadCookies :: IO HTTP.CookieJar
+loadCookies = do
+  path <- getCookieJarPath
+  printf "Load cookies: %s\n" path
+  HTTP.createCookieJar . fromMaybe [] <$> (Binary.decodeFile path `catchNoPropagate` handler)
+  where
+    handler :: ExceptionWithContext IOException -> IO (Maybe [HTTP.Cookie])
+    handler ec@(ExceptionWithContext _ e) | isDoesNotExistError e = pure Nothing
+    handler ec = rethrowIO ec
+
+storeCookies :: HTTP.CookieJar -> IO ()
+storeCookies jar = do
+  path <- getCookieJarPath
+  -- printf "Store cookies: %s\n" path
+  Binary.encodeFile path (HTTP.destroyCookieJar jar)
 
 getCacheDir :: IO FilePath
 getCacheDir = do
@@ -100,7 +138,7 @@ downloadHttp :: Text -> FilePath -> IO FilePath
 downloadHttp url extension = do
   withCache url extension $ \url' filename -> do
     rq <- applyDefHeaders <$> HTTP.parseRequest (Text.unpack url')
-    print rq
+    -- print rq
     printf "HTTP %s -> %s\n" url filename
     rp <- HTTP.httpBS rq
     BS.writeFile filename (HTTP.getResponseBody rp)
@@ -157,18 +195,21 @@ appendRequestHeaders ((name, value):headers) =
 
 http :: RequestMethod -> Text -> Maybe RequestBody -> [(HTTP.HeaderName, BS.ByteString)] -> IO (Text, LBS.ByteString)
 http method urlInitial maybeBody extraHeaders = do
-  go urlInitial 12
+  jar <- loadCookies
+  go urlInitial jar 12
 
   where
-    go :: Text -> Int -> IO (Text, LBS.ByteString)
-    go _url 0 =
+    go :: Text -> HTTP.CookieJar -> Int -> IO (Text, LBS.ByteString)
+    go _url jar 0 = do
+      storeCookies jar
       throwHTTPError "Maximum redirect count exceeded"
-    go url n = do
+    go url jar n = do
       printf "HTTP %s %s\n" (show method) url
-      rq <- appendRequestHeaders extraHeaders .
+      rq' <- appendRequestHeaders extraHeaders .
             setRequestBodyMaybe maybeBody .
             HTTP.setRequestMethod (requestMethodBS method) <$>
               HTTP.parseRequest (Text.unpack url)
+      let rq = rq' { HTTP.cookieJar = Just jar }
       -- print $ HTTP.requestHeaders rq
       case HTTP.requestBody rq of
         HTTP.RequestBodyLBS lbs -> LBS.putStr lbs >> putStrLn ""
@@ -179,13 +220,15 @@ http method urlInitial maybeBody extraHeaders = do
         HTTP.RequestBodyIO {} -> putStrLn "RequestBodyIO"
 
       rp <- HTTP.httpLBS rq { HTTP.redirectCount = 0 }
+      let jar' = jar <> HTTP.responseCookieJar rp
       printf "HTTP %i %s\n"
         (HTTP.getResponseStatusCode rp)
         (decodeUtf8 . HTTP.statusMessage $ HTTP.getResponseStatus rp)
       if HTTP.getResponseStatusCode rp `elem` redirectCodes then do
         let mlocation = lookup "Location" $ HTTP.getResponseHeaders rp
         case mlocation of
-          Nothing ->
+          Nothing -> do
+            storeCookies jar'
             throwHTTPError "Missing location header"
           Just location -> do
             -- printf "Redirecting due to Location header: %s\n" (decodeUtf8 location)
@@ -193,11 +236,13 @@ http method urlInitial maybeBody extraHeaders = do
             urlRight <- either throwHTTPError return (parseURLText (decodeUtf8 location))
             -- printf "%s -> %s\n" (show urlLeft) (show urlRight)
             let url' = renderURLText $ urlLeft <> urlRight
-            if url' == url then
+            if url' == url then do
+              storeCookies jar'
               throwHTTPError $ "Infinite redirection (location): " <> show url
             else do
-              go url' (n - 1)
+              go url' jar' (n - 1)
       else if HTTP.getResponseStatusCode rp >= 400 then do
+        storeCookies jar'
         throwHTTPError $
           "HTTP Error: " <>
             show (HTTP.getResponseStatusCode rp) <> " " <>
@@ -222,13 +267,16 @@ http method urlInitial maybeBody extraHeaders = do
           case metaRefresh of
             url':_ -> do
               -- printf "Redirecting due to meta refresh: %s\n" url'
-              if url' == url then
+              if url' == url then do
+                storeCookies jar'
                 throwHTTPError $ "Infinite redirection (meta refresh): " <> show url
               else
-                go url' (n - 1)
+                go url' jar' (n - 1)
             [] -> do
+              storeCookies jar'
               return (url, body)
-        else
+        else do
+          storeCookies jar'
           return (url, body)
 
 
