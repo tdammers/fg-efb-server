@@ -63,31 +63,32 @@ function listFiles(path)
             local path = intercalate(URL.parse(linkURL).path, '/')
             local label = link:query('span[lang=en]')[1].node.textContent
             print(label)
-            label = string.gsub(label, '^AD 2 [A-Z][A-Z][A-Z][A-Z] ', '');
-            label = string.gsub(label, 'Aerodrome Chart', 'ADC');
-            label = string.gsub(label, 'Aerodrome Ground Movement Chart', 'AGMC');
-            label = string.gsub(label, 'Aircraft Parking/Docking Chart', 'APDC');
-            label = string.gsub(label, 'Aerodrome Obstacle Chart', 'AOC');
-            label = string.gsub(label, 'Instrument Approach Chart', 'IAC');
-            label = string.gsub(label, 'Precision Approach Terrain Chart', 'PATC');
-            label = string.gsub(label, 'ICAO', '');
-            label = string.gsub(label, 'RWY', '');
-            label = string.gsub(label, 'Arrival Chart Transition to Final Approach', 'Transition');
-            label = string.gsub(label, 'Radar Vector Pattern', 'RVP');
-            label = string.gsub(label, 'Standard Departure Routes', 'SID Routes');
-            label = string.gsub(label, 'Standard Departure Chart', 'SID');
-            label = string.gsub(label, 'Standard Arrival Routes', 'STAR Routes');
-            label = string.gsub(label, 'Standard Arrival Chart', 'STAR');
-            label = string.gsub(label, 'Departure Chart', 'SID');
-            label = string.gsub(label, 'Instrument', '');
-            label = string.gsub(label, '- *-', '-');
-            label = string.gsub(label, '- *$', '');
-            table.insert(result,
-                { type = "pdf"
-                ; name = label
-                ; path = path
-                }
-            )
+            label = string.gsub(label, '^AD 2 [A-Z][A-Z][A-Z][A-Z] ', '')
+            local number = string.gsub(label, '([-0-9]+).*', '%1')
+            label = string.gsub(label, 'ICAO', '')
+            label = string.gsub(label, 'Aircraft Parking/Docking Chart', 'APDC')
+            label = string.gsub(label, 'AIRCRAFT PARKING/DOCKING CHART', 'APDC')
+            label = string.gsub(label, 'Aerodrome Obstacle Chart', 'AOC')
+            label = string.gsub(label, 'Precision Approach Terrain Chart', 'PATC')
+            label = string.gsub(label, 'STANDARD ARRIVAL CHART %- INSTRUMENT %(STAR%)', 'STAR')
+            label = string.gsub(label, 'STANDARD INSTRUMENT ARRIVAL ROUTES %(STAR%)', 'STAR ROUTES')
+            label = string.gsub(label, 'INSTRUMENT APPROACH CHART', 'IAC')
+            label = string.gsub(label, 'INSTRUMENT APPROACH PROCEDURE', 'APPR')
+            label = string.gsub(label, 'OMNIDIRECTIONAL INSTRUMENT DEPARTURE CHART %(OID%)', 'OID')
+            label = string.gsub(label, 'OMNIDIRECTIONAL INSTRUMENT DEPARTURE ROUTES %(OID%)', 'OID ROUTES')
+            label = string.gsub(label, 'STANDARD DEPARTURE CHART %- INSTRUMENT %(SID%)', 'SID')
+            label = string.gsub(label, 'STANDARD INSTRUMENT DEPARTURE ROUTES %(SID%)', 'SID ROUTES')
+            label = string.gsub(label, '- *-', '-')
+            label = string.gsub(label, '- *$', '')
+            print(number, label)
+            if string.sub(number, 1, 1) ~= "1" then
+                table.insert(result,
+                    { type = "pdf"
+                    ; name = label
+                    ; path = path
+                    }
+                )
+            end
         end
         return result
     end
